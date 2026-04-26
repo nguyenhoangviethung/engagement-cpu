@@ -13,6 +13,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 from torch.utils.data import DataLoader, Subset, WeightedRandomSampler
+from tqdm import tqdm
 
 from config import (
     BATCH_SIZE,
@@ -211,6 +212,7 @@ def _make_loader(dataset: FeatureSequenceDataset, indices: list[int], batch_size
         batch_size=batch_size,
         shuffle=shuffle,
         num_workers=NUM_WORKERS,
+        persistent_workers=True if NUM_WORKERS > 0 else False,
         pin_memory=False,
         drop_last=False,
     )
@@ -253,6 +255,7 @@ def _make_weighted_train_loader(
         sampler=sampler,
         shuffle=False,
         num_workers=NUM_WORKERS,
+        persistent_workers=True if NUM_WORKERS > 0 else False,
         pin_memory=False,
         drop_last=False,
     )
@@ -274,7 +277,7 @@ def _train_one_epoch(model, loader, criterion, optimizer, device, threshold: flo
     all_probabilities = []
     all_labels = []
 
-    for features, labels in loader:
+    for features, labels in tqdm(loader, desc="Training", unit="batch"):
         features = features.to(device)
         labels = labels.to(device)
 
@@ -308,7 +311,7 @@ def _evaluate(model, loader, criterion, device, threshold: float):
     all_probabilities = []
     all_labels = []
 
-    for features, labels in loader:
+    for features, labels in tqdm(loader, desc="Evaluating", unit="batch"):
         features = features.to(device)
         labels = labels.to(device)
         logits = model(features)
