@@ -1,0 +1,7 @@
+logs/
+data/
+checkpoints/
+__pycache__/
+*.log
+.vscode/
+AGENTS.md
