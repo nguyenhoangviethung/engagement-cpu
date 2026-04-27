@@ -43,9 +43,9 @@ RUNS_PROCESSED_DIR = FEATURE_MANIFEST_CSV.parent / "runs"
 
 
 class FocalLoss(nn.Module):
-    def __init__(self, alpha=0.4, gamma=2.0):
+    def __init__(self, alpha=0.5, gamma=2.0):
         super().__init__()
-        # alpha controls class balance (0.4 for positive class since it's the majority)
+        # alpha controls class balance.
         self.alpha = alpha
         self.gamma = gamma
         self.bce_with_logits = nn.BCEWithLogitsLoss(reduction="none")
@@ -186,24 +186,24 @@ def _compute_binary_metrics(labels: np.ndarray, probabilities: np.ndarray, thres
 
 
 def _find_best_threshold(labels: np.ndarray, probabilities: np.ndarray) -> tuple[float, dict[str, float]]:
-    thresholds = np.arange(0.05, 0.96, 0.05)
+    thresholds = np.arange(0.1, 0.9, 0.05)
     best_threshold = 0.5
     best_metrics = _compute_binary_metrics(labels, probabilities, threshold=0.5)
 
     for threshold in thresholds:
         metrics = _compute_binary_metrics(labels, probabilities, threshold=float(threshold))
-        if metrics["balanced_accuracy"] > best_metrics["balanced_accuracy"] + 1e-8:
+        
+        # Tiêu chí 1: Tìm Threshold cho Balanced Accuracy cao nhất (Ép cân bằng 2 Recall)
+        if metrics["balanced_accuracy"] > best_metrics["balanced_accuracy"] + 1e-6:
             best_threshold = float(threshold)
             best_metrics = metrics
-            continue
-        if abs(metrics["balanced_accuracy"] - best_metrics["balanced_accuracy"]) <= 1e-8 and (
-            metrics["f1_macro"] > best_metrics["f1_macro"] + 1e-8
-        ):
-            best_threshold = float(threshold)
-            best_metrics = metrics
+        # Tiêu chí 2: Nếu Balanced Accuracy ngang nhau, chọn Threshold nào cho Recall 1 (Tập trung) cao hơn
+        elif abs(metrics["balanced_accuracy"] - best_metrics["balanced_accuracy"]) <= 1e-6:
+            if metrics["recall_pos"] > best_metrics["recall_pos"]:
+                best_threshold = float(threshold)
+                best_metrics = metrics
 
     return best_threshold, best_metrics
-
 
 def _make_loader(dataset: FeatureSequenceDataset, indices: list[int], batch_size: int, shuffle: bool) -> DataLoader:
     subset = Subset(dataset, indices)
@@ -410,7 +410,7 @@ def train(
         "dropout": DROPOUT,
     }
     model = _build_model(**model_kwargs).to(DEVICE)
-    criterion = FocalLoss(alpha=0.4, gamma=2.0).to(DEVICE)
+    criterion = FocalLoss(alpha=0.5, gamma=2.0).to(DEVICE)
     optimizer = torch.optim.AdamW(model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer,
@@ -422,7 +422,7 @@ def train(
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    best_val_loss = math.inf
+    best_val_precision_pos = -math.inf
     best_val_balanced_accuracy = -math.inf
     best_val_f1_macro = -math.inf
     best_threshold = 0.5
@@ -443,12 +443,14 @@ def train(
                 "epoch": epoch,
                 "train_loss": train_loss,
                 "train_accuracy": train_metrics["accuracy"],
+                "train_precision_pos": train_metrics["precision_pos"],
                 "train_balanced_accuracy": train_metrics["balanced_accuracy"],
                 "train_recall_pos": train_metrics["recall_pos"],
                 "train_recall_neg": train_metrics["recall_neg"],
                 "train_f1_macro": train_metrics["f1_macro"],
                 "val_loss": val_loss,
                 "val_accuracy": val_metrics["accuracy"],
+                "val_precision_pos": val_metrics["precision_pos"],
                 "val_balanced_accuracy": val_metrics["balanced_accuracy"],
                 "val_recall_pos": val_metrics["recall_pos"],
                 "val_recall_neg": val_metrics["recall_neg"],
@@ -460,18 +462,20 @@ def train(
         if epoch % max(1, log_every) == 0 or epoch == 1 or epoch == epochs:
             LOGGER.info(
                 "Epoch %02d/%02d | "
-                "train_loss=%.4f train_acc=%.4f train_bal_acc=%.4f train_rec1=%.4f train_rec0=%.4f | "
-                "val_loss=%.4f val_acc=%.4f val_bal_acc=%.4f val_rec1=%.4f val_rec0=%.4f val_f1_macro=%.4f | "
+                "train_loss=%.4f train_acc=%.4f train_prec1=%.4f train_bal_acc=%.4f train_rec1=%.4f train_rec0=%.4f | "
+                "val_loss=%.4f val_acc=%.4f val_prec1=%.4f val_bal_acc=%.4f val_rec1=%.4f val_rec0=%.4f val_f1_macro=%.4f | "
                 "th=%.2f lr=%.6f",
                 epoch,
                 epochs,
                 train_loss,
                 train_metrics["accuracy"],
+                train_metrics["precision_pos"],
                 train_metrics["balanced_accuracy"],
                 train_metrics["recall_pos"],
                 train_metrics["recall_neg"],
                 val_loss,
                 val_metrics["accuracy"],
+                val_metrics["precision_pos"],
                 val_metrics["balanced_accuracy"],
                 val_metrics["recall_pos"],
                 val_metrics["recall_neg"],
@@ -482,10 +486,8 @@ def train(
 
         scheduler.step(val_loss)
 
-        should_save = val_metrics["f1_macro"] > best_val_f1_macro + 1e-8
-
-        if should_save:
-            best_val_loss = val_loss
+        if val_metrics["balanced_accuracy"] > best_val_balanced_accuracy + 1e-8:
+            best_val_precision_pos = val_metrics["precision_pos"]
             best_val_balanced_accuracy = val_metrics["balanced_accuracy"]
             best_val_f1_macro = val_metrics["f1_macro"]
             best_threshold = epoch_threshold
@@ -494,6 +496,7 @@ def train(
                     "model_state_dict": model.state_dict(),
                     "model_kwargs": model_kwargs,
                     "best_threshold": best_threshold,
+                    "best_val_precision_pos": best_val_precision_pos,
                     "best_val_balanced_accuracy": best_val_balanced_accuracy,
                     "best_val_f1_macro": best_val_f1_macro,
                     "history": history,
@@ -501,7 +504,7 @@ def train(
                 output_path,
             )
 
-        if early_stopping.step(val_metrics["f1_macro"]):
+        if early_stopping.step(val_metrics["balanced_accuracy"]):
             LOGGER.info("Early stopping triggered at epoch %d", epoch)
             break
 
@@ -521,9 +524,10 @@ def train(
         threshold=best_threshold,
     )
     LOGGER.info(
-        "Test metrics | loss=%.4f acc=%.4f bal_acc=%.4f rec1=%.4f rec0=%.4f f1_macro=%.4f threshold=%.2f",
+        "Test metrics | loss=%.4f acc=%.4f prec1=%.4f bal_acc=%.4f rec1=%.4f rec0=%.4f f1_macro=%.4f threshold=%.2f",
         test_loss,
         test_metrics["accuracy"],
+        test_metrics["precision_pos"],
         test_metrics["balanced_accuracy"],
         test_metrics["recall_pos"],
         test_metrics["recall_neg"],
@@ -535,12 +539,13 @@ def train(
     summary_path.write_text(
         json.dumps(
             {
-                "best_val_loss": best_val_loss,
+                "best_val_precision_pos": best_val_precision_pos,
                 "best_val_balanced_accuracy": best_val_balanced_accuracy,
                 "best_val_f1_macro": best_val_f1_macro,
                 "best_threshold": best_threshold,
                 "test_loss": test_loss,
                 "test_accuracy": test_metrics["accuracy"],
+                "test_precision_pos": test_metrics["precision_pos"],
                 "test_balanced_accuracy": test_metrics["balanced_accuracy"],
                 "test_recall_pos": test_metrics["recall_pos"],
                 "test_recall_neg": test_metrics["recall_neg"],

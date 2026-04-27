@@ -11,6 +11,7 @@ import numpy as np
 import pandas as pd
 
 from config import (
+    FEATURE_DIM,
     FEATURE_MANIFEST_CSV,
     FEATURES_DIR,
     PROCESSED_LABELS_CSV,
@@ -24,7 +25,12 @@ from config import (
 LEFT_EYE = [33, 160, 158, 133, 153, 144]
 RIGHT_EYE = [362, 385, 387, 263, 373, 380]
 FLATTEN_LANDMARKS = [33, 133, 362, 263, 61, 291, 13, 14]
-FEATURE_DIM = 30
+FRAME_FEATURE_DIM = 30
+
+if FRAME_FEATURE_DIM * 3 != FEATURE_DIM:
+    raise ValueError(
+        f"Configured FEATURE_DIM={FEATURE_DIM} must equal 3 * FRAME_FEATURE_DIM ({FRAME_FEATURE_DIM * 3})"
+    )
 
 
 LOGGER = logging.getLogger("extract_features")
@@ -106,23 +112,40 @@ def _build_frame_feature(landmarks) -> np.ndarray:
 
 
 def _empty_feature() -> np.ndarray:
-    return np.zeros(FEATURE_DIM, dtype=np.float32)
+    return np.zeros(FRAME_FEATURE_DIM, dtype=np.float32)
 
 
 def _pad_sequence(sequence: list[np.ndarray]) -> np.ndarray:
-    if len(sequence) == SEQUENCE_LENGTH:
-        return np.stack(sequence, axis=0)
     if not sequence:
-        return np.zeros((SEQUENCE_LENGTH, FEATURE_DIM), dtype=np.float32)
-    padding = [np.zeros(FEATURE_DIM, dtype=np.float32) for _ in range(SEQUENCE_LENGTH - len(sequence))]
-    return np.stack(sequence + padding, axis=0)
+        return np.zeros((SEQUENCE_LENGTH, FRAME_FEATURE_DIM), dtype=np.float32)
+
+    stacked_sequence = np.stack(sequence, axis=0).astype(np.float32)
+    if len(sequence) >= SEQUENCE_LENGTH:
+        return stacked_sequence[:SEQUENCE_LENGTH]
+
+    pad_count = SEQUENCE_LENGTH - len(sequence)
+    edge_padding = np.repeat(stacked_sequence[-1:], pad_count, axis=0)
+    return np.concatenate([stacked_sequence, edge_padding], axis=0)
 
 
 def _window_frames(frame_features: list[np.ndarray]) -> list[np.ndarray]:
     windows: list[np.ndarray] = []
     for start_index in range(0, len(frame_features), SEQUENCE_LENGTH):
         chunk = frame_features[start_index : start_index + SEQUENCE_LENGTH]
-        windows.append(_pad_sequence(chunk))
+        padded_chunk = _pad_sequence(chunk)
+
+        velocity = np.zeros_like(padded_chunk, dtype=np.float32)
+        velocity[1:] = padded_chunk[1:] - padded_chunk[:-1]
+
+        window_std = np.std(padded_chunk, axis=0).astype(np.float32)
+        std_matrix = np.tile(window_std, (SEQUENCE_LENGTH, 1))
+
+        enriched_chunk = np.concatenate([padded_chunk, velocity, std_matrix], axis=-1).astype(np.float32, copy=False)
+        if enriched_chunk.shape[-1] != FEATURE_DIM:
+            raise ValueError(
+                f"Unexpected enriched feature dim: got {enriched_chunk.shape[-1]}, expected {FEATURE_DIM}"
+            )
+        windows.append(enriched_chunk)
     return windows
 
 

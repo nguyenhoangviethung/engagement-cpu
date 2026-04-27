@@ -2,6 +2,8 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 
+from config import FEATURE_DIM
+
 class TemporalAttention(nn.Module):
     """
     Cơ chế Attention giúp mô hình tự động tìm ra các khung hình (frames) 
@@ -28,7 +30,7 @@ class TemporalAttention(nn.Module):
 
 
 class EngagementGRU(nn.Module):
-    def __init__(self, input_size: int, hidden_size: int = 64, num_layers: int = 2, dropout: float = 0.3):
+    def __init__(self, input_size: int = FEATURE_DIM, hidden_size: int = 64, num_layers: int = 2, dropout: float = 0.3):
         super().__init__()
         
         # 1. Feature Extractor: Xử lý vector đặc trưng ban đầu
