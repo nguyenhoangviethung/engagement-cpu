@@ -1,0 +1,56 @@
+{
+  "best_val_loss": 0.0,
+  "test_loss": 0.2197422206401825,
+  "test_accuracy": 0.3333333333333333,
+  "history": [
+    {
+      "epoch": 1,
+      "train_loss": 0.0,
+      "train_accuracy": 0.26666666666666666,
+      "val_loss": 0.0,
+      "val_accuracy": 0.0
+    },
+    {
+      "epoch": 2,
+      "train_loss": 0.0,
+      "train_accuracy": 0.3,
+      "val_loss": 0.0,
+      "val_accuracy": 0.0
+    },
+    {
+      "epoch": 3,
+      "train_loss": 0.0,
+      "train_accuracy": 0.36666666666666664,
+      "val_loss": 0.0,
+      "val_accuracy": 0.0
+    },
+    {
+      "epoch": 4,
+      "train_loss": 0.0,
+      "train_accuracy": 0.13333333333333333,
+      "val_loss": 0.0,
+      "val_accuracy": 0.0
+    },
+    {
+      "epoch": 5,
+      "train_loss": 0.0,
+      "train_accuracy": 0.13333333333333333,
+      "val_loss": 0.0,
+      "val_accuracy": 0.0
+    },
+    {
+      "epoch": 6,
+      "train_loss": 0.0,
+      "train_accuracy": 0.23333333333333334,
+      "val_loss": 0.0,
+      "val_accuracy": 0.0
+    },
+    {
+      "epoch": 7,
+      "train_loss": 0.0,
+      "train_accuracy": 0.26666666666666666,
+      "val_loss": 0.0,
+      "val_accuracy": 0.0
+    }
+  ]
+}
