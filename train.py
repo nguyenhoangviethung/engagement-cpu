@@ -59,6 +59,17 @@ class FocalLoss(nn.Module):
         return focal_loss.mean()
 
 
+def _objective_score(metrics: dict[str, float], objective: str, min_recall_pos: float) -> float:
+    if objective == "balanced_accuracy":
+        return float(metrics["balanced_accuracy"])
+    if objective == "focused_recall":
+        # Prefer candidates that satisfy recall target, then rank by class-1 F1.
+        if metrics["recall_pos"] >= min_recall_pos:
+            return 1.0 + float(metrics["f1_pos"])
+        return float(metrics["recall_pos"])
+    return float(metrics["f1_pos"])
+
+
 def _setup_logging() -> None:
     logging.basicConfig(
         level=logging.DEBUG,
@@ -185,25 +196,82 @@ def _compute_binary_metrics(labels: np.ndarray, probabilities: np.ndarray, thres
     }
 
 
-def _find_best_threshold(labels: np.ndarray, probabilities: np.ndarray) -> tuple[float, dict[str, float]]:
-    thresholds = np.arange(0.1, 0.9, 0.05)
+def _find_best_threshold(
+    labels: np.ndarray,
+    probabilities: np.ndarray,
+    objective: str = "f1_pos",
+    min_recall_pos: float = 0.75,
+) -> tuple[float, dict[str, float]]:
+    thresholds = np.arange(0.1, 0.901, 0.01)
     best_threshold = 0.5
     best_metrics = _compute_binary_metrics(labels, probabilities, threshold=0.5)
+    found_recall_feasible = False
+
+    def _is_better(metrics: dict[str, float], incumbent: dict[str, float]) -> bool:
+        return _is_better_for_objective(
+            metrics,
+            incumbent,
+            objective=objective,
+            min_recall_pos=min_recall_pos,
+        )
 
     for threshold in thresholds:
         metrics = _compute_binary_metrics(labels, probabilities, threshold=float(threshold))
-        
-        # Tiêu chí 1: Tìm Threshold cho Balanced Accuracy cao nhất (Ép cân bằng 2 Recall)
-        if metrics["balanced_accuracy"] > best_metrics["balanced_accuracy"] + 1e-6:
+        if objective == "focused_recall" and metrics["recall_pos"] >= min_recall_pos:
+            found_recall_feasible = True
+        if _is_better(metrics, best_metrics):
             best_threshold = float(threshold)
             best_metrics = metrics
-        # Tiêu chí 2: Nếu Balanced Accuracy ngang nhau, chọn Threshold nào cho Recall 1 (Tập trung) cao hơn
-        elif abs(metrics["balanced_accuracy"] - best_metrics["balanced_accuracy"]) <= 1e-6:
-            if metrics["recall_pos"] > best_metrics["recall_pos"]:
-                best_threshold = float(threshold)
-                best_metrics = metrics
 
+    if objective == "focused_recall" and not found_recall_feasible:
+        LOGGER.warning(
+            "No validation threshold reached recall_pos >= %.2f; using best available recall-based threshold.",
+            min_recall_pos,
+        )
     return best_threshold, best_metrics
+
+
+def _is_better_for_objective(
+    candidate: dict[str, float],
+    incumbent: dict[str, float],
+    objective: str,
+    min_recall_pos: float,
+) -> bool:
+    if objective == "focused_recall":
+        candidate_feasible = candidate["recall_pos"] >= min_recall_pos
+        incumbent_feasible = incumbent["recall_pos"] >= min_recall_pos
+        if candidate_feasible and not incumbent_feasible:
+            return True
+        if candidate_feasible and incumbent_feasible:
+            if candidate["f1_pos"] > incumbent["f1_pos"] + 1e-8:
+                return True
+            if abs(candidate["f1_pos"] - incumbent["f1_pos"]) <= 1e-8:
+                return candidate["precision_pos"] > incumbent["precision_pos"] + 1e-8
+            return False
+        if not candidate_feasible and incumbent_feasible:
+            return False
+        if candidate["recall_pos"] > incumbent["recall_pos"] + 1e-8:
+            return True
+        if abs(candidate["recall_pos"] - incumbent["recall_pos"]) <= 1e-8:
+            return candidate["f1_pos"] > incumbent["f1_pos"] + 1e-8
+        return False
+
+    if objective == "balanced_accuracy":
+        if candidate["balanced_accuracy"] > incumbent["balanced_accuracy"] + 1e-8:
+            return True
+        if abs(candidate["balanced_accuracy"] - incumbent["balanced_accuracy"]) <= 1e-8:
+            return candidate["recall_pos"] > incumbent["recall_pos"] + 1e-8
+        return False
+
+    # Default objective: maximize class-1 F1 (focused class quality).
+    if candidate["f1_pos"] > incumbent["f1_pos"] + 1e-8:
+        return True
+    if abs(candidate["f1_pos"] - incumbent["f1_pos"]) <= 1e-8:
+        if candidate["recall_pos"] > incumbent["recall_pos"] + 1e-8:
+            return True
+        if abs(candidate["recall_pos"] - incumbent["recall_pos"]) <= 1e-8:
+            return candidate["balanced_accuracy"] > incumbent["balanced_accuracy"] + 1e-8
+    return False
 
 def _make_loader(dataset: FeatureSequenceDataset, indices: list[int], batch_size: int, shuffle: bool) -> DataLoader:
     subset = Subset(dataset, indices)
@@ -218,11 +286,12 @@ def _make_loader(dataset: FeatureSequenceDataset, indices: list[int], batch_size
     )
 
 
-def _make_weighted_train_loader(
+def _make_train_loader(
     dataset: FeatureSequenceDataset,
     manifest_df: pd.DataFrame,
     indices: list[int],
     batch_size: int,
+    sampler_strategy: str = "weighted",
 ) -> DataLoader:
     subset = Subset(dataset, indices)
     labels = manifest_df.iloc[indices]["label"].astype(int).to_numpy()
@@ -239,6 +308,17 @@ def _make_weighted_train_loader(
             "This often means features were extracted from a small/sample subset. "
             "Re-run full extraction without --sample to train on full data."
             f"{details}"
+        )
+
+    if sampler_strategy == "shuffle":
+        return DataLoader(
+            subset,
+            batch_size=batch_size,
+            shuffle=True,
+            num_workers=NUM_WORKERS,
+            persistent_workers=True if NUM_WORKERS > 0 else False,
+            pin_memory=False,
+            drop_last=False,
         )
 
     class_weights = 1.0 / class_counts
@@ -261,6 +341,57 @@ def _make_weighted_train_loader(
     )
 
 
+def _compute_feature_stats(
+    dataset: FeatureSequenceDataset,
+    indices: list[int],
+    eps: float = 1e-6,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    if not indices:
+        raise ValueError("Cannot compute feature stats from an empty index list.")
+
+    sample_feature, _ = dataset[indices[0]]
+    feature_dim = int(sample_feature.shape[-1])
+    sum_features = torch.zeros(feature_dim, dtype=torch.float64)
+    sumsq_features = torch.zeros(feature_dim, dtype=torch.float64)
+    total_frames = 0
+
+    for index in indices:
+        features, _ = dataset[index]
+        frame_features = features.to(dtype=torch.float64)
+        sum_features += frame_features.sum(dim=0)
+        sumsq_features += (frame_features * frame_features).sum(dim=0)
+        total_frames += int(frame_features.shape[0])
+
+    mean = sum_features / max(1, total_frames)
+    variance = (sumsq_features / max(1, total_frames)) - (mean * mean)
+    std = torch.sqrt(torch.clamp(variance, min=eps))
+    return mean.to(dtype=torch.float32), std.to(dtype=torch.float32)
+
+
+def _build_criterion(
+    loss_name: str,
+    positives: float,
+    negatives: float,
+    focal_alpha: float | None,
+    focal_gamma: float,
+    device: str,
+) -> tuple[nn.Module, dict[str, float]]:
+    class_total = max(1.0, positives + negatives)
+    pos_ratio = positives / class_total
+    neg_ratio = negatives / class_total
+
+    if loss_name == "bce_weighted":
+        pos_weight_value = negatives / max(1.0, positives)
+        criterion = nn.BCEWithLogitsLoss(pos_weight=torch.tensor(pos_weight_value, dtype=torch.float32)).to(device)
+        return criterion, {"pos_weight": float(pos_weight_value), "pos_ratio": float(pos_ratio), "neg_ratio": float(neg_ratio)}
+
+    resolved_alpha = focal_alpha
+    if resolved_alpha is None:
+        resolved_alpha = float(np.clip(neg_ratio, 0.05, 0.95))
+    criterion = FocalLoss(alpha=resolved_alpha, gamma=focal_gamma).to(device)
+    return criterion, {"focal_alpha": float(resolved_alpha), "focal_gamma": float(focal_gamma), "pos_ratio": float(pos_ratio), "neg_ratio": float(neg_ratio)}
+
+
 def _build_model(input_size: int, hidden_size: int, dropout: float, num_layers: int = MODEL_NUM_LAYERS) -> EngagementGRU:
     return EngagementGRU(
         input_size=input_size,
@@ -270,7 +401,16 @@ def _build_model(input_size: int, hidden_size: int, dropout: float, num_layers: 
     )
 
 
-def _train_one_epoch(model, loader, criterion, optimizer, device, threshold: float = 0.5):
+def _train_one_epoch(
+    model,
+    loader,
+    criterion,
+    optimizer,
+    device,
+    threshold: float = 0.5,
+    feature_mean: torch.Tensor | None = None,
+    feature_std: torch.Tensor | None = None,
+):
     model.train()
     running_loss = 0.0
     running_total = 0
@@ -279,6 +419,8 @@ def _train_one_epoch(model, loader, criterion, optimizer, device, threshold: flo
 
     for features, labels in tqdm(loader, desc="Training", unit="batch"):
         features = features.to(device)
+        if feature_mean is not None and feature_std is not None:
+            features = (features - feature_mean) / feature_std
         labels = labels.to(device)
 
         optimizer.zero_grad(set_to_none=True)
@@ -304,7 +446,15 @@ def _train_one_epoch(model, loader, criterion, optimizer, device, threshold: flo
 
 
 @torch.no_grad()
-def _evaluate(model, loader, criterion, device, threshold: float):
+def _evaluate(
+    model,
+    loader,
+    criterion,
+    device,
+    threshold: float,
+    feature_mean: torch.Tensor | None = None,
+    feature_std: torch.Tensor | None = None,
+):
     model.eval()
     running_loss = 0.0
     running_total = 0
@@ -313,6 +463,8 @@ def _evaluate(model, loader, criterion, device, threshold: float):
 
     for features, labels in tqdm(loader, desc="Evaluating", unit="batch"):
         features = features.to(device)
+        if feature_mean is not None and feature_std is not None:
+            features = (features - feature_mean) / feature_std
         labels = labels.to(device)
         logits = model(features)
         loss = criterion(logits, labels)
@@ -339,6 +491,13 @@ def train(
     seed: int = RANDOM_SEED,
     log_every: int = 1,
     run_id: str | None = None,
+    threshold_objective: str = "balanced_accuracy",
+    min_recall_pos: float = 0.75,
+    loss_name: str = "bce_weighted",
+    focal_alpha: float | None = None,
+    focal_gamma: float = 2.0,
+    sampler_strategy: str = "weighted",
+    normalize_features: bool = True,
 ) -> Path:
     _set_seed(seed)
     torch.set_num_threads(max(1, os.cpu_count() or 1))
@@ -346,11 +505,16 @@ def train(
     manifest_csv = _resolve_manifest_path(manifest_csv, run_id)
 
     LOGGER.info(
-        "Starting training | manifest=%s | output=%s | sample=%s | seed=%d",
+        "Starting training | manifest=%s | output=%s | sample=%s | seed=%d | threshold_objective=%s | min_recall_pos=%.2f | loss=%s | sampler=%s | normalize=%s",
         manifest_csv,
         output_path,
         sample,
         seed,
+        threshold_objective,
+        min_recall_pos,
+        loss_name,
+        sampler_strategy,
+        normalize_features,
     )
 
     dataset = FeatureSequenceDataset(manifest_csv)
@@ -374,7 +538,13 @@ def train(
     epochs = SAMPLE_EPOCHS if sample else EPOCHS
     patience = 2 if sample else EARLY_STOPPING_PATIENCE
 
-    train_loader = _make_weighted_train_loader(dataset, manifest_df, train_indices, batch_size=batch_size)
+    train_loader = _make_train_loader(
+        dataset,
+        manifest_df,
+        train_indices,
+        batch_size=batch_size,
+        sampler_strategy=sampler_strategy,
+    )
     val_loader = _make_loader(dataset, val_indices, batch_size=batch_size, shuffle=False)
     test_loader = _make_loader(dataset, test_indices, batch_size=batch_size, shuffle=False)
 
@@ -402,6 +572,19 @@ def train(
         positives / max(1.0, positives + negatives),
     )
 
+    feature_mean = None
+    feature_std = None
+    if normalize_features:
+        mean_cpu, std_cpu = _compute_feature_stats(dataset, train_indices)
+        feature_mean = mean_cpu.to(DEVICE).view(1, 1, -1)
+        feature_std = std_cpu.to(DEVICE).view(1, 1, -1)
+        LOGGER.info(
+            "Feature normalization enabled | mean_abs=%.6f | std_min=%.6f | std_median=%.6f",
+            float(mean_cpu.abs().mean().item()),
+            float(std_cpu.min().item()),
+            float(std_cpu.median().item()),
+        )
+
     sample_features, _ = dataset[0]
     model_kwargs = {
         "input_size": sample_features.shape[-1],
@@ -410,7 +593,15 @@ def train(
         "dropout": DROPOUT,
     }
     model = _build_model(**model_kwargs).to(DEVICE)
-    criterion = FocalLoss(alpha=0.5, gamma=2.0).to(DEVICE)
+    criterion, criterion_config = _build_criterion(
+        loss_name=loss_name,
+        positives=positives,
+        negatives=negatives,
+        focal_alpha=focal_alpha,
+        focal_gamma=focal_gamma,
+        device=DEVICE,
+    )
+    LOGGER.info("Criterion config: %s", criterion_config)
     optimizer = torch.optim.AdamW(model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer,
@@ -426,17 +617,35 @@ def train(
     best_val_balanced_accuracy = -math.inf
     best_val_f1_macro = -math.inf
     best_threshold = 0.5
+    best_val_metrics_for_objective: dict[str, float] | None = None
     history = []
+    best_objective_score = -math.inf
     for epoch in range(1, epochs + 1):
-        train_loss, train_metrics = _train_one_epoch(model, train_loader, criterion, optimizer, DEVICE, threshold=0.5)
+        train_loss, train_metrics = _train_one_epoch(
+            model,
+            train_loader,
+            criterion,
+            optimizer,
+            DEVICE,
+            threshold=0.5,
+            feature_mean=feature_mean,
+            feature_std=feature_std,
+        )
         val_loss, _, val_labels, val_probabilities = _evaluate(
             model,
             val_loader,
             criterion,
             DEVICE,
             threshold=0.5,
+            feature_mean=feature_mean,
+            feature_std=feature_std,
         )
-        epoch_threshold, val_metrics = _find_best_threshold(val_labels, val_probabilities)
+        epoch_threshold, val_metrics = _find_best_threshold(
+            val_labels,
+            val_probabilities,
+            objective=threshold_objective,
+            min_recall_pos=min_recall_pos,
+        )
 
         history.append(
             {
@@ -464,7 +673,7 @@ def train(
                 "Epoch %02d/%02d | "
                 "train_loss=%.4f train_acc=%.4f train_prec1=%.4f train_bal_acc=%.4f train_rec1=%.4f train_rec0=%.4f | "
                 "val_loss=%.4f val_acc=%.4f val_prec1=%.4f val_bal_acc=%.4f val_rec1=%.4f val_rec0=%.4f val_f1_macro=%.4f | "
-                "th=%.2f lr=%.6f",
+                "th=%.2f lr=%.6f objective=%s",
                 epoch,
                 epochs,
                 train_loss,
@@ -482,20 +691,46 @@ def train(
                 val_metrics["f1_macro"],
                 epoch_threshold,
                 optimizer.param_groups[0]["lr"],
-            )
+                threshold_objective,
+        )
 
         scheduler.step(val_loss)
+        objective_score = _objective_score(
+            val_metrics,
+            objective=threshold_objective,
+            min_recall_pos=min_recall_pos,
+        )
 
-        if val_metrics["balanced_accuracy"] > best_val_balanced_accuracy + 1e-8:
+        should_save_checkpoint = (
+            best_val_metrics_for_objective is None
+            or _is_better_for_objective(
+                val_metrics,
+                best_val_metrics_for_objective,
+                objective=threshold_objective,
+                min_recall_pos=min_recall_pos,
+            )
+        )
+        if should_save_checkpoint:
             best_val_precision_pos = val_metrics["precision_pos"]
             best_val_balanced_accuracy = val_metrics["balanced_accuracy"]
             best_val_f1_macro = val_metrics["f1_macro"]
             best_threshold = epoch_threshold
+            best_val_metrics_for_objective = val_metrics.copy()
+            best_objective_score = objective_score
             torch.save(
                 {
                     "model_state_dict": model.state_dict(),
                     "model_kwargs": model_kwargs,
                     "best_threshold": best_threshold,
+                    "threshold_objective": threshold_objective,
+                    "min_recall_pos": min_recall_pos,
+                    "loss_name": loss_name,
+                    "criterion_config": criterion_config,
+                    "sampler_strategy": sampler_strategy,
+                    "normalize_features": normalize_features,
+                    "feature_mean": mean_cpu.numpy().tolist() if normalize_features else None,
+                    "feature_std": std_cpu.numpy().tolist() if normalize_features else None,
+                    "best_objective_score": best_objective_score,
                     "best_val_precision_pos": best_val_precision_pos,
                     "best_val_balanced_accuracy": best_val_balanced_accuracy,
                     "best_val_f1_macro": best_val_f1_macro,
@@ -504,7 +739,7 @@ def train(
                 output_path,
             )
 
-        if early_stopping.step(val_metrics["balanced_accuracy"]):
+        if early_stopping.step(objective_score):
             LOGGER.info("Early stopping triggered at epoch %d", epoch)
             break
 
@@ -522,6 +757,8 @@ def train(
         criterion,
         DEVICE,
         threshold=best_threshold,
+        feature_mean=feature_mean,
+        feature_std=feature_std,
     )
     LOGGER.info(
         "Test metrics | loss=%.4f acc=%.4f prec1=%.4f bal_acc=%.4f rec1=%.4f rec0=%.4f f1_macro=%.4f threshold=%.2f",
@@ -543,6 +780,13 @@ def train(
                 "best_val_balanced_accuracy": best_val_balanced_accuracy,
                 "best_val_f1_macro": best_val_f1_macro,
                 "best_threshold": best_threshold,
+                "threshold_objective": threshold_objective,
+                "min_recall_pos": min_recall_pos,
+                "loss_name": loss_name,
+                "criterion_config": criterion_config,
+                "sampler_strategy": sampler_strategy,
+                "normalize_features": normalize_features,
+                "best_objective_score": best_objective_score,
                 "test_loss": test_loss,
                 "test_accuracy": test_metrics["accuracy"],
                 "test_precision_pos": test_metrics["precision_pos"],
@@ -567,6 +811,50 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--seed", type=int, default=RANDOM_SEED, help="Random seed")
     parser.add_argument("--log-every", type=int, default=1, help="Log progress every N epochs")
     parser.add_argument("--run-id", type=str, default=None, help="Run id used to resolve run-scoped manifests")
+    parser.add_argument(
+        "--threshold-objective",
+        type=str,
+        default="balanced_accuracy",
+        choices=["f1_pos", "focused_recall", "balanced_accuracy"],
+        help="Validation criterion for selecting decision threshold",
+    )
+    parser.add_argument(
+        "--min-recall-pos",
+        type=float,
+        default=0.75,
+        help="Minimum target recall for class=1 when threshold objective is focused_recall",
+    )
+    parser.add_argument(
+        "--loss",
+        type=str,
+        default="bce_weighted",
+        choices=["bce_weighted", "focal"],
+        help="Training loss strategy",
+    )
+    parser.add_argument(
+        "--focal-alpha",
+        type=float,
+        default=None,
+        help="Positive-class alpha for focal loss; defaults to auto class-ratio if omitted",
+    )
+    parser.add_argument(
+        "--focal-gamma",
+        type=float,
+        default=2.0,
+        help="Gamma for focal loss",
+    )
+    parser.add_argument(
+        "--train-sampler",
+        type=str,
+        default="weighted",
+        choices=["weighted", "shuffle"],
+        help="Sampling strategy for training loader",
+    )
+    parser.add_argument(
+        "--no-normalize-features",
+        action="store_true",
+        help="Disable train-split feature normalization",
+    )
     return parser.parse_args()
 
 
@@ -580,6 +868,13 @@ def main() -> None:
         seed=args.seed,
         log_every=args.log_every,
         run_id=args.run_id,
+        threshold_objective=args.threshold_objective,
+        min_recall_pos=args.min_recall_pos,
+        loss_name=args.loss,
+        focal_alpha=args.focal_alpha,
+        focal_gamma=args.focal_gamma,
+        sampler_strategy=args.train_sampler,
+        normalize_features=not args.no_normalize_features,
     )
     LOGGER.info("Saved checkpoint to %s", checkpoint_path)
 
