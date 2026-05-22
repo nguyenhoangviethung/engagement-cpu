@@ -1,5 +1,5 @@
 logs/
-data/
+data/raw/
 # checkpoints/
 __pycache__/
 *.log
