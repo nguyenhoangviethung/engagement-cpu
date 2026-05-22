@@ -9,7 +9,7 @@ RUNS_CHECKPOINT_DIR="$WORKDIR/checkpoints/runs"
 REPORTS_DIR="$WORKDIR/checkpoints/reports"
 
 COMMAND="start"
-RUN_ID_PREFIX="nightly"
+RUN_ID_PREFIX="p2"
 RNN_MANIFEST="$WORKDIR/data/processed/runs/pipeline_2/feature_manifest.csv"
 ML_MANIFEST="$WORKDIR/data/processed/runs/pipeline_2/feature_manifest.csv"
 CNN_MANIFEST="$WORKDIR/data/processed/cnn_frame_manifest.csv"
@@ -22,6 +22,17 @@ SAMPLE_MODE=0
 DEVICE="cuda"
 USE_AMP=1
 RNN_CPU_THREADS=2
+RNN_HIDDEN_SIZE=192
+RNN_NUM_LAYERS=3
+RNN_DROPOUT=0.25
+RNN_BATCH_SIZE=128
+RNN_EPOCHS=40
+RNN_PATIENCE=10
+RNN_MIN_EPOCHS=12
+RNN_TCN_BLOCKS=4
+RNN_TCN_KERNEL_SIZE=5
+RNN_THRESHOLD_OBJECTIVE="balanced_accuracy"
+RNN_LOSS="bce_weighted"
 ML_CPU_WORKERS=2
 CNN_MODEL="mobilenet_v3_small"
 CNN_BATCH_SIZE=64
@@ -31,7 +42,7 @@ CNN_IMAGE_SIZE=112
 EXAMPLE_MODE=0
 
 usage() {
-  cat <<'EOF'
+  cat <<'USAGE'
 Usage: scripts/tmux_train_all.sh [command] [options]
 
 Commands: start|attach|status|stop|logs
@@ -48,6 +59,17 @@ Options:
   --device NAME
   --no-amp
   --rnn-cpu-threads N
+  --rnn-hidden-size N
+  --rnn-num-layers N
+  --rnn-dropout V
+  --rnn-batch-size N
+  --rnn-epochs N
+  --rnn-patience N
+  --rnn-min-epochs N
+  --rnn-tcn-blocks N
+  --rnn-tcn-kernel-size N
+  --rnn-threshold-objective NAME
+  --rnn-loss NAME
   --ml-cpu-workers N
   --cnn-model NAME
   --cnn-batch-size N
@@ -56,7 +78,7 @@ Options:
   --session NAME
   --env NAME
   --example            Help-only smoke run in tmux
-EOF
+USAGE
 }
 
 while [[ $# -gt 0 ]]; do
@@ -73,6 +95,17 @@ while [[ $# -gt 0 ]]; do
     --device) DEVICE="$2"; shift 2 ;;
     --no-amp) USE_AMP=0; shift ;;
     --rnn-cpu-threads) RNN_CPU_THREADS="$2"; shift 2 ;;
+    --rnn-hidden-size) RNN_HIDDEN_SIZE="$2"; shift 2 ;;
+    --rnn-num-layers) RNN_NUM_LAYERS="$2"; shift 2 ;;
+    --rnn-dropout) RNN_DROPOUT="$2"; shift 2 ;;
+    --rnn-batch-size) RNN_BATCH_SIZE="$2"; shift 2 ;;
+    --rnn-epochs) RNN_EPOCHS="$2"; shift 2 ;;
+    --rnn-patience) RNN_PATIENCE="$2"; shift 2 ;;
+    --rnn-min-epochs) RNN_MIN_EPOCHS="$2"; shift 2 ;;
+    --rnn-tcn-blocks) RNN_TCN_BLOCKS="$2"; shift 2 ;;
+    --rnn-tcn-kernel-size) RNN_TCN_KERNEL_SIZE="$2"; shift 2 ;;
+    --rnn-threshold-objective) RNN_THRESHOLD_OBJECTIVE="$2"; shift 2 ;;
+    --rnn-loss) RNN_LOSS="$2"; shift 2 ;;
     --ml-cpu-workers) ML_CPU_WORKERS="$2"; shift 2 ;;
     --cnn-model) CNN_MODEL="$2"; shift 2 ;;
     --cnn-batch-size) CNN_BATCH_SIZE="$2"; shift 2 ;;
@@ -89,196 +122,70 @@ done
 mkdir -p "$LOG_DIR" "$REPORTS_DIR"
 LATEST_LOG_LINK="$LOG_DIR/latest_train_all.log"
 
-build_command() {
-  local timestamp="$(date +%Y%m%d_%H%M%S)"
-  local run_root="$RUNS_CHECKPOINT_DIR/train_all_${RUN_ID_PREFIX}_${timestamp}"
-  local run_log="$LOG_DIR/train_all_${RUN_ID_PREFIX}_${timestamp}.log"
-  local summary_json="$run_root/train_all_summary.json"
-  local history_jsonl="$REPORTS_DIR/train_all_history.jsonl"
-
-  local sample_flag=""
-  [[ "$SAMPLE_MODE" -eq 1 ]] && sample_flag=" --sample"
-
-  local amp_flag=""
-  [[ "$USE_AMP" -eq 1 ]] && amp_flag=" --amp"
+start_session() {
+  local timestamp run_root run_log summary_json history_jsonl cmd
+  timestamp="$(date +%Y%m%d_%H%M%S)"
+  run_root="$RUNS_CHECKPOINT_DIR/train_all_${RUN_ID_PREFIX}_${timestamp}"
+  run_log="$LOG_DIR/train_all_${RUN_ID_PREFIX}_${timestamp}.log"
+  summary_json="$run_root/train_all_summary.json"
+  history_jsonl="$REPORTS_DIR/train_all_history.jsonl"
 
   if [[ "$EXAMPLE_MODE" -eq 1 ]]; then
-    cat <<EOF
-cd "$WORKDIR"
-set -euo pipefail
-
-echo "=== train_all example started at \$(date) ===" | tee -a "$run_log"
-./scripts/rnn/tmux_train_eval.sh --help 2>&1 | tee -a "$run_log"
-./scripts/ml/tmux_train_eval.sh --help 2>&1 | tee -a "$run_log"
-./scripts/cnn/tmux_train_eval.sh --help 2>&1 | tee -a "$run_log"
-echo "=== train_all example finished at \$(date) ===" | tee -a "$run_log"
-ln -sfn "$run_log" "$LATEST_LOG_LINK"
-EOF
+    cmd="cd '$WORKDIR' && set -euo pipefail && echo '=== train_all example started at '$(date) | tee -a '$run_log' && ./scripts/rnn/tmux_train_eval.sh --help 2>&1 | tee -a '$run_log' && ./scripts/ml/tmux_train_eval.sh --help 2>&1 | tee -a '$run_log' && ./scripts/cnn/tmux_train_eval.sh --help 2>&1 | tee -a '$run_log' && echo '=== train_all example finished at '$(date) | tee -a '$run_log' && ln -sfn '$run_log' '$LATEST_LOG_LINK'"
+    tmux new-session -d -s "$SESSION_NAME" "bash -lc \"$cmd\""
     return
   fi
 
-  cat <<EOF
-cd "$WORKDIR"
-set -euo pipefail
+  cmd="cd '$WORKDIR' && \
+WORKDIR='$WORKDIR' CONDA_ENV='$CONDA_ENV' RUN_ID_PREFIX='$RUN_ID_PREFIX' \
+RNN_MANIFEST='$RNN_MANIFEST' ML_MANIFEST='$ML_MANIFEST' CNN_MANIFEST='$CNN_MANIFEST' \
+RNN_MODELS='$RNN_MODELS' INCLUDE_ML='$INCLUDE_ML' INCLUDE_CNN='$INCLUDE_CNN' \
+SAMPLE_MODE='$SAMPLE_MODE' DEVICE='$DEVICE' USE_AMP='$USE_AMP' \
+RNN_CPU_THREADS='$RNN_CPU_THREADS' ML_CPU_WORKERS='$ML_CPU_WORKERS' \
+RNN_HIDDEN_SIZE='$RNN_HIDDEN_SIZE' RNN_NUM_LAYERS='$RNN_NUM_LAYERS' RNN_DROPOUT='$RNN_DROPOUT' \
+RNN_BATCH_SIZE='$RNN_BATCH_SIZE' RNN_EPOCHS='$RNN_EPOCHS' RNN_PATIENCE='$RNN_PATIENCE' \
+RNN_MIN_EPOCHS='$RNN_MIN_EPOCHS' RNN_TCN_BLOCKS='$RNN_TCN_BLOCKS' RNN_TCN_KERNEL_SIZE='$RNN_TCN_KERNEL_SIZE' \
+RNN_THRESHOLD_OBJECTIVE='$RNN_THRESHOLD_OBJECTIVE' RNN_LOSS='$RNN_LOSS' \
+CNN_MODEL='$CNN_MODEL' CNN_BATCH_SIZE='$CNN_BATCH_SIZE' CNN_EPOCHS='$CNN_EPOCHS' CNN_IMAGE_SIZE='$CNN_IMAGE_SIZE' \
+RUN_ROOT='$run_root' RUN_LOG='$run_log' SUMMARY_JSON='$summary_json' HISTORY_JSONL='$history_jsonl' \
+LATEST_LOG_LINK='$LATEST_LOG_LINK' RUNS_CHECKPOINT_DIR='$RUNS_CHECKPOINT_DIR' \
+bash '$WORKDIR/scripts/train_all_runner.sh'"
 
-mkdir -p "$run_root"
-
-echo "=== train_all started at \$(date) ===" | tee -a "$run_log"
-echo "run_root=$run_root" | tee -a "$run_log"
-
-results_jsonl="$run_root/results.jsonl"
-: > "\$results_jsonl"
-
-for model in $RNN_MODELS; do
-  rid="${RUN_ID_PREFIX}_rnn_\$model"
-  out_dir="$run_root/rnn_\$model"
-  mkdir -p "\$out_dir"
-  ckpt="\$out_dir/engagement_gru.pt"
-  eval_json="\$out_dir/eval_test.json"
-  agg_json="\$out_dir/train_eval_summary.json"
-
-  echo "[RNN] model=\$model rid=\$rid" | tee -a "$run_log"
-  conda run --no-capture-output -n "$CONDA_ENV" env PYTHONPATH="$WORKDIR/src" python -m engagement_daisee.rnn.train$sample_flag$amp_flag \\
-    --manifest "$RNN_MANIFEST" \\
-    --output "\$ckpt" \\
-    --run-id "\$rid" \\
-    --model "\$model" \\
-    --device "$DEVICE" \\
-    --cpu-threads "$RNN_CPU_THREADS" 2>&1 | tee -a "$run_log"
-
-  conda run --no-capture-output -n "$CONDA_ENV" env PYTHONPATH="$WORKDIR/src" python -m engagement_daisee.rnn.evaluate \\
-    --manifest "$RNN_MANIFEST" \\
-    --checkpoint "\$ckpt" \\
-    --split test \\
-    --batch-size 128 \\
-    --output-json "\$eval_json" 2>&1 | tee -a "$run_log"
-
-  conda run --no-capture-output -n "$CONDA_ENV" python - <<"PY" "\$out_dir/engagement_gru.json" "\$eval_json" "\$agg_json" "\$rid" "\$model"
-import json, sys
-from pathlib import Path
-train_path, eval_path, agg_path, rid, model = [Path(sys.argv[1]), Path(sys.argv[2]), Path(sys.argv[3]), sys.argv[4], sys.argv[5]]
-train = json.loads(train_path.read_text()) if train_path.exists() else {}
-evalp = json.loads(eval_path.read_text()) if eval_path.exists() else {}
-payload = {"run_id": rid, "module": "rnn", "model": model, "train": train, "eval": evalp}
-agg_path.write_text(json.dumps(payload, indent=2))
-print(json.dumps(payload))
-PY | tee -a "$run_log" >> "\$results_jsonl"
-done
-
-if [[ "$INCLUDE_ML" -eq 1 ]]; then
-  rid="${RUN_ID_PREFIX}_ml"
-  out_dir="$run_root/ml"
-  mkdir -p "\$out_dir"
-  model_path="\$out_dir/engagement_xgb.json"
-  eval_json="\$out_dir/eval_test.json"
-  agg_json="\$out_dir/train_eval_summary.json"
-
-  echo "[ML] rid=\$rid" | tee -a "$run_log"
-  conda run --no-capture-output -n "$CONDA_ENV" env PYTHONPATH="$WORKDIR/src" python -m engagement_daisee.ml.train$sample_flag \\
-    --manifest "$ML_MANIFEST" \\
-    --output "\$model_path" \\
-    --run-id "\$rid" \\
-    --backend auto \\
-    --feature-mode tsfresh \\
-    --cpu-workers "$ML_CPU_WORKERS" 2>&1 | tee -a "$run_log"
-
-  conda run --no-capture-output -n "$CONDA_ENV" env PYTHONPATH="$WORKDIR/src" python -m engagement_daisee.ml.evaluate \\
-    --manifest "$ML_MANIFEST" \\
-    --model "\$model_path" \\
-    --split test \\
-    --feature-mode tsfresh \\
-    --summary-json "\$out_dir/engagement_xgb.summary.json" \\
-    --output-json "\$eval_json" 2>&1 | tee -a "$run_log"
-
-  conda run --no-capture-output -n "$CONDA_ENV" python - <<"PY" "\$out_dir/engagement_xgb.summary.json" "\$eval_json" "\$agg_json" "\$rid"
-import json, sys
-from pathlib import Path
-train_path, eval_path, agg_path, rid = [Path(sys.argv[1]), Path(sys.argv[2]), Path(sys.argv[3]), sys.argv[4]]
-train = json.loads(train_path.read_text()) if train_path.exists() else {}
-evalp = json.loads(eval_path.read_text()) if eval_path.exists() else {}
-payload = {"run_id": rid, "module": "ml", "train": train, "eval": evalp}
-agg_path.write_text(json.dumps(payload, indent=2))
-print(json.dumps(payload))
-PY | tee -a "$run_log" >> "\$results_jsonl"
-fi
-
-if [[ "$INCLUDE_CNN" -eq 1 ]]; then
-  if [[ ! -f "$CNN_MANIFEST" ]]; then
-    echo "[CNN] skipped: manifest not found at $CNN_MANIFEST" | tee -a "$run_log"
-  else
-    rid="${RUN_ID_PREFIX}_cnn"
-    out_dir="$run_root/cnn"
-    mkdir -p "\$out_dir"
-    ckpt="\$out_dir/engagement_cnn.pt"
-    eval_json="\$out_dir/eval_test.json"
-    agg_json="\$out_dir/train_eval_summary.json"
-
-    echo "[CNN] rid=\$rid" | tee -a "$run_log"
-    conda run --no-capture-output -n "$CONDA_ENV" env PYTHONPATH="$WORKDIR/src" python -m engagement_daisee.cnn.train$sample_flag \\
-      --manifest "$CNN_MANIFEST" \\
-      --output "\$ckpt" \\
-      --run-id "\$rid" \\
-      --model "$CNN_MODEL" \\
-      --image-size "$CNN_IMAGE_SIZE" \\
-      --batch-size "$CNN_BATCH_SIZE" \\
-      --epochs "$CNN_EPOCHS" 2>&1 | tee -a "$run_log"
-
-    conda run --no-capture-output -n "$CONDA_ENV" env PYTHONPATH="$WORKDIR/src" python -m engagement_daisee.cnn.evaluate \\
-      --manifest "$CNN_MANIFEST" \\
-      --checkpoint "\$ckpt" \\
-      --split test \\
-      --batch-size 256 \\
-      --output-json "\$eval_json" 2>&1 | tee -a "$run_log"
-
-    conda run --no-capture-output -n "$CONDA_ENV" python - <<"PY" "\$out_dir/engagement_cnn.json" "\$eval_json" "\$agg_json" "\$rid" "$CNN_MODEL"
-import json, sys
-from pathlib import Path
-train_path, eval_path, agg_path, rid, model = [Path(sys.argv[1]), Path(sys.argv[2]), Path(sys.argv[3]), sys.argv[4], sys.argv[5]]
-train = json.loads(train_path.read_text()) if train_path.exists() else {}
-evalp = json.loads(eval_path.read_text()) if eval_path.exists() else {}
-payload = {"run_id": rid, "module": "cnn", "model": model, "train": train, "eval": evalp}
-agg_path.write_text(json.dumps(payload, indent=2))
-print(json.dumps(payload))
-PY | tee -a "$run_log" >> "\$results_jsonl"
-  fi
-fi
-
-conda run --no-capture-output -n "$CONDA_ENV" python - <<"PY" "\$results_jsonl" "$summary_json" "$history_jsonl" "$RUN_ID_PREFIX"
-import json, sys
-from pathlib import Path
-results_path = Path(sys.argv[1])
-summary_path = Path(sys.argv[2])
-history_path = Path(sys.argv[3])
-prefix = sys.argv[4]
-
-items = []
-for line in results_path.read_text().splitlines():
-    line = line.strip()
-    if line:
-        items.append(json.loads(line))
-
-payload = {"run_id_prefix": prefix, "items": items}
-summary_path.write_text(json.dumps(payload, indent=2))
-with history_path.open("a", encoding="utf-8") as f:
-    f.write(json.dumps(payload, ensure_ascii=True) + "\\n")
-print(json.dumps({"saved": str(summary_path), "history": str(history_path), "count": len(items)}, indent=2))
-PY | tee -a "$run_log"
-
-echo "=== train_all finished at \$(date) ===" | tee -a "$run_log"
-ln -sfn "$run_log" "$LATEST_LOG_LINK"
-EOF
+  tmux new-session -d -s "$SESSION_NAME" "bash -lc \"$cmd\""
 }
 
 case "$COMMAND" in
   start)
-    if tmux has-session -t "$SESSION_NAME" 2>/dev/null; then echo "Session '$SESSION_NAME' already exists."; exit 1; fi
-    SCRIPT="$(build_command)"
-    tmux new-session -d -s "$SESSION_NAME" "bash -lc '$SCRIPT'"
+    if tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
+      echo "Session '$SESSION_NAME' already exists."
+      exit 1
+    fi
+    start_session
     echo "Started tmux session: $SESSION_NAME"
     ;;
-  attach) tmux attach -t "$SESSION_NAME" ;;
-  status) tmux has-session -t "$SESSION_NAME" 2>/dev/null && tmux list-sessions | grep "^$SESSION_NAME:" || { echo "Session '$SESSION_NAME' is not running."; exit 1; } ;;
-  stop) tmux kill-session -t "$SESSION_NAME" 2>/dev/null && echo "Stopped tmux session: $SESSION_NAME" || { echo "Session '$SESSION_NAME' is not running."; exit 1; } ;;
-  logs) [[ -L "$LATEST_LOG_LINK" || -f "$LATEST_LOG_LINK" ]] && tail -n 240 "$LATEST_LOG_LINK" || { echo "No latest log found"; exit 1; } ;;
-  *) usage; exit 1 ;;
+  attach)
+    tmux attach -t "$SESSION_NAME"
+    ;;
+  status)
+    tmux has-session -t "$SESSION_NAME" 2>/dev/null && tmux list-sessions | grep "^$SESSION_NAME:" || {
+      echo "Session '$SESSION_NAME' is not running."
+      exit 1
+    }
+    ;;
+  stop)
+    tmux kill-session -t "$SESSION_NAME" 2>/dev/null && echo "Stopped tmux session: $SESSION_NAME" || {
+      echo "Session '$SESSION_NAME' is not running."
+      exit 1
+    }
+    ;;
+  logs)
+    [[ -L "$LATEST_LOG_LINK" || -f "$LATEST_LOG_LINK" ]] && tail -n 240 "$LATEST_LOG_LINK" || {
+      echo "No latest log found"
+      exit 1
+    }
+    ;;
+  *)
+    usage
+    exit 1
+    ;;
 esac

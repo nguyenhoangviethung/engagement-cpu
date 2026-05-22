@@ -115,8 +115,8 @@ cd "$WORKDIR"
 set -euo pipefail
 
 echo "=== RNN train+eval example started at \$(date) ===" | tee -a "$run_log"
-conda run --no-capture-output -n "$CONDA_ENV" env PYTHONPATH="$WORKDIR/src" python -m engagement_daisee.rnn.train --help 2>&1 | tee -a "$run_log"
-conda run --no-capture-output -n "$CONDA_ENV" env PYTHONPATH="$WORKDIR/src" python -m engagement_daisee.rnn.evaluate --help 2>&1 | tee -a "$run_log"
+"$WORKDIR/scripts/lib/run_python.sh" --env "$CONDA_ENV" --workdir "$WORKDIR" env PYTHONPATH="$WORKDIR/src" python -m engagement_daisee.rnn.train --help 2>&1 | tee -a "$run_log"
+"$WORKDIR/scripts/lib/run_python.sh" --env "$CONDA_ENV" --workdir "$WORKDIR" env PYTHONPATH="$WORKDIR/src" python -m engagement_daisee.rnn.evaluate --help 2>&1 | tee -a "$run_log"
 echo "=== RNN train+eval example finished at \$(date) ===" | tee -a "$run_log"
 ln -sfn "$run_log" "$LATEST_LOG_LINK"
 EOF
@@ -134,7 +134,7 @@ echo "Model: $MODEL_NAME" | tee -a "$run_log"
 echo "Manifest: $MANIFEST" | tee -a "$run_log"
 echo "Checkpoint: $checkpoint" | tee -a "$run_log"
 
-conda run --no-capture-output -n "$CONDA_ENV" env PYTHONPATH="$WORKDIR/src" python -m engagement_daisee.rnn.train$sample_flag$amp_flag \
+"$WORKDIR/scripts/lib/run_python.sh" --env "$CONDA_ENV" --workdir "$WORKDIR" env PYTHONPATH="$WORKDIR/src" python -m engagement_daisee.rnn.train$sample_flag$amp_flag \
   --manifest "$MANIFEST" \
   --output "$checkpoint" \
   --run-id "$active_run_id" \
@@ -143,14 +143,14 @@ conda run --no-capture-output -n "$CONDA_ENV" env PYTHONPATH="$WORKDIR/src" pyth
   --device "$DEVICE" \
   --log-every "$LOG_EVERY"$resume_flag 2>&1 | tee -a "$run_log"
 
-conda run --no-capture-output -n "$CONDA_ENV" env PYTHONPATH="$WORKDIR/src" python -m engagement_daisee.rnn.evaluate \
+"$WORKDIR/scripts/lib/run_python.sh" --env "$CONDA_ENV" --workdir "$WORKDIR" env PYTHONPATH="$WORKDIR/src" python -m engagement_daisee.rnn.evaluate \
   --manifest "$MANIFEST" \
   --checkpoint "$checkpoint" \
   --split "$SPLIT" \
   --batch-size "$BATCH_SIZE" \
   --output-json "$eval_json"$threshold_flag 2>&1 | tee -a "$run_log"
 
-conda run --no-capture-output -n "$CONDA_ENV" python - <<"PY" "$train_summary" "$eval_json" "$aggregate_json" "$history_jsonl" "$active_run_id" "$MODEL_NAME" "$MANIFEST" "$checkpoint"
+"$WORKDIR/scripts/lib/run_python.sh" --env "$CONDA_ENV" --workdir "$WORKDIR" python - <<"PY" "$train_summary" "$eval_json" "$aggregate_json" "$history_jsonl" "$active_run_id" "$MODEL_NAME" "$MANIFEST" "$checkpoint"
 import json
 import sys
 from pathlib import Path

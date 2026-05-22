@@ -159,7 +159,7 @@ cd "$WORKDIR"
 set -euo pipefail
 
 echo "=== Train example started at \$(date) ===" | tee -a "$run_log"
-conda run --no-capture-output -n "$CONDA_ENV" env PYTHONPATH="$WORKDIR/src" python -m engagement_daisee.rnn.train --help 2>&1 | tee -a "$run_log"
+"$WORKDIR/scripts/lib/run_python.sh" --env "$CONDA_ENV" --workdir "$WORKDIR" env PYTHONPATH="$WORKDIR/src" python -m engagement_daisee.rnn.train --help 2>&1 | tee -a "$run_log"
 echo "=== Train example finished at \$(date) ===" | tee -a "$run_log"
 ln -sfn "$run_log" "$LATEST_LOG_LINK"
 EOF
@@ -175,7 +175,7 @@ echo "Manifest: $MANIFEST" | tee -a "$run_log"
 echo "Run ID: $active_run_id" | tee -a "$run_log"
 echo "Run checkpoint: $run_checkpoint" | tee -a "$run_log"
 mkdir -p "$run_checkpoint_dir"
-conda run --no-capture-output -n "$CONDA_ENV" env PYTHONPATH="$WORKDIR/src" python -m engagement_daisee.rnn.train$sample_flag$amp_flag --manifest "$MANIFEST" --log-every "$LOG_EVERY" --output "$run_checkpoint" --run-id "$active_run_id" --model "$MODEL_NAME" --cpu-threads "$CPU_THREADS" --device "$DEVICE"$resume_flag 2>&1 | tee -a "$run_log"
+"$WORKDIR/scripts/lib/run_python.sh" --env "$CONDA_ENV" --workdir "$WORKDIR" env PYTHONPATH="$WORKDIR/src" python -m engagement_daisee.rnn.train$sample_flag$amp_flag --manifest "$MANIFEST" --log-every "$LOG_EVERY" --output "$run_checkpoint" --run-id "$active_run_id" --model "$MODEL_NAME" --cpu-threads "$CPU_THREADS" --device "$DEVICE"$resume_flag 2>&1 | tee -a "$run_log"
 echo "=== Train finished at \$(date) ===" | tee -a "$run_log"
 ln -sfn "$run_log" "$LATEST_LOG_LINK"
 EOF

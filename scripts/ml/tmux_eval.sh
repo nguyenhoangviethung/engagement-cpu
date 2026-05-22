@@ -66,7 +66,7 @@ cd "$WORKDIR"
 set -euo pipefail
 
 echo "=== ML eval example started at \$(date) ===" | tee -a "$run_log"
-conda run --no-capture-output -n "$CONDA_ENV" env PYTHONPATH="$WORKDIR/src" python -m engagement_daisee.ml.evaluate --help 2>&1 | tee -a "$run_log"
+"$WORKDIR/scripts/lib/run_python.sh" --env "$CONDA_ENV" --workdir "$WORKDIR" env PYTHONPATH="$WORKDIR/src" python -m engagement_daisee.ml.evaluate --help 2>&1 | tee -a "$run_log"
 echo "=== ML eval example finished at \$(date) ===" | tee -a "$run_log"
 ln -sfn "$run_log" "$LATEST_LOG_LINK"
 EOF
@@ -85,7 +85,7 @@ cd "$WORKDIR"
 set -euo pipefail
 
 echo "=== ML eval started at \$(date) ===" | tee -a "$run_log"
-conda run --no-capture-output -n "$CONDA_ENV" env PYTHONPATH="$WORKDIR/src" python -m engagement_daisee.ml.evaluate \\
+"$WORKDIR/scripts/lib/run_python.sh" --env "$CONDA_ENV" --workdir "$WORKDIR" env PYTHONPATH="$WORKDIR/src" python -m engagement_daisee.ml.evaluate \\
   --manifest "$MANIFEST" \\
   --model "$MODEL" \\
   --split "$SPLIT" \\

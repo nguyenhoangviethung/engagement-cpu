@@ -93,7 +93,7 @@ cd "$WORKDIR"
 set -euo pipefail
 
 echo "=== CNN train example started at \$(date) ===" | tee -a "$run_log"
-conda run --no-capture-output -n "$CONDA_ENV" env PYTHONPATH="$WORKDIR/src" python -m engagement_daisee.cnn.train --help 2>&1 | tee -a "$run_log"
+"$WORKDIR/scripts/lib/run_python.sh" --env "$CONDA_ENV" --workdir "$WORKDIR" env PYTHONPATH="$WORKDIR/src" python -m engagement_daisee.cnn.train --help 2>&1 | tee -a "$run_log"
 echo "=== CNN train example finished at \$(date) ===" | tee -a "$run_log"
 ln -sfn "$run_log" "$LATEST_LOG_LINK"
 EOF
@@ -117,7 +117,7 @@ echo "=== CNN train started at \$(date) ===" | tee -a "$run_log"
 echo "Run ID: $active_run_id" | tee -a "$run_log"
 echo "Checkpoint: $run_checkpoint" | tee -a "$run_log"
 mkdir -p "$run_checkpoint_dir"
-conda run --no-capture-output -n "$CONDA_ENV" env PYTHONPATH="$WORKDIR/src" python -u -m engagement_daisee.cnn.train$sample_flag \\
+"$WORKDIR/scripts/lib/run_python.sh" --env "$CONDA_ENV" --workdir "$WORKDIR" env PYTHONPATH="$WORKDIR/src" python -u -m engagement_daisee.cnn.train$sample_flag \\
   --manifest "$MANIFEST" \\
   --output "$run_checkpoint" \\
   --model "$MODEL_NAME" \\

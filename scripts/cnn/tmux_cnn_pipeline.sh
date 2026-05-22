@@ -176,17 +176,17 @@ echo "Checkpoint: $checkpoint" | tee -a "$run_log"
 mkdir -p "$frame_dir" "$run_checkpoint_dir"
 
 echo "[1/3] preprocess_labels.py" | tee -a "$run_log"
-conda run --no-capture-output -n "$CONDA_ENV" env PYTHONPATH="$WORKDIR/src" python -m engagement_daisee.rnn.preprocess_labels 2>&1 | tee -a "$run_log"
+"$WORKDIR/scripts/lib/run_python.sh" --env "$CONDA_ENV" --workdir "$WORKDIR" env PYTHONPATH="$WORKDIR/src" python -m engagement_daisee.rnn.preprocess_labels 2>&1 | tee -a "$run_log"
 
 echo "[2/3] cnn_extract_frames.py$sample_flag" | tee -a "$run_log"
-conda run --no-capture-output -n "$CONDA_ENV" env PYTHONPATH="$WORKDIR/src" python -u -m engagement_daisee.cnn.extract_frames$sample_flag \\
+"$WORKDIR/scripts/lib/run_python.sh" --env "$CONDA_ENV" --workdir "$WORKDIR" env PYTHONPATH="$WORKDIR/src" python -u -m engagement_daisee.cnn.extract_frames$sample_flag \\
   --output-dir "$frame_dir" \\
   --manifest "$manifest" \\
   --frame-size "$FRAME_SIZE" \\
   --frames-per-video "$FRAMES_PER_VIDEO" 2>&1 | tee -a "$run_log"
 
 echo "[3/3] train_cnn.py$sample_flag" | tee -a "$run_log"
-conda run --no-capture-output -n "$CONDA_ENV" env PYTHONPATH="$WORKDIR/src" python -u -m engagement_daisee.cnn.train$sample_flag \\
+"$WORKDIR/scripts/lib/run_python.sh" --env "$CONDA_ENV" --workdir "$WORKDIR" env PYTHONPATH="$WORKDIR/src" python -u -m engagement_daisee.cnn.train$sample_flag \\
   --manifest "$manifest" \\
   --output "$checkpoint" \\
   --model "$MODEL_NAME" \\

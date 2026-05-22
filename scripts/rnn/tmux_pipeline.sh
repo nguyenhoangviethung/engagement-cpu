@@ -169,13 +169,13 @@ mkdir -p "$run_features_dir"
 mkdir -p "$run_checkpoint_dir"
 
 echo "[1/3] preprocess_labels.py" | tee -a "$run_log"
-conda run --no-capture-output -n "$CONDA_ENV" env PYTHONPATH="$WORKDIR/src" python -m engagement_daisee.rnn.preprocess_labels 2>&1 | tee -a "$run_log"
+"$WORKDIR/scripts/lib/run_python.sh" --env "$CONDA_ENV" --workdir "$WORKDIR" env PYTHONPATH="$WORKDIR/src" python -m engagement_daisee.rnn.preprocess_labels 2>&1 | tee -a "$run_log"
 
 echo "[2/3] extract_features.py$sample_flag" | tee -a "$run_log"
-conda run --no-capture-output -n "$CONDA_ENV" env PYTHONPATH="$WORKDIR/src" python -u -m engagement_daisee.rnn.extract_features$sample_flag --features-dir "$run_features_dir" --manifest "$run_manifest" --log-every "$EXTRACT_LOG_EVERY" 2>&1 | tee -a "$run_log"
+"$WORKDIR/scripts/lib/run_python.sh" --env "$CONDA_ENV" --workdir "$WORKDIR" env PYTHONPATH="$WORKDIR/src" python -u -m engagement_daisee.rnn.extract_features$sample_flag --features-dir "$run_features_dir" --manifest "$run_manifest" --log-every "$EXTRACT_LOG_EVERY" 2>&1 | tee -a "$run_log"
 
 echo "[3/3] train.py$sample_flag" | tee -a "$run_log"
-conda run --no-capture-output -n "$CONDA_ENV" env PYTHONPATH="$WORKDIR/src" python -u -m engagement_daisee.rnn.train$sample_flag$amp_flag --manifest "$run_manifest" --output "$run_checkpoint" --log-every "$TRAIN_LOG_EVERY" --model "$MODEL_NAME" --cpu-threads "$CPU_THREADS" --device "$DEVICE"$resume_flag 2>&1 | tee -a "$run_log"
+"$WORKDIR/scripts/lib/run_python.sh" --env "$CONDA_ENV" --workdir "$WORKDIR" env PYTHONPATH="$WORKDIR/src" python -u -m engagement_daisee.rnn.train$sample_flag$amp_flag --manifest "$run_manifest" --output "$run_checkpoint" --log-every "$TRAIN_LOG_EVERY" --model "$MODEL_NAME" --cpu-threads "$CPU_THREADS" --device "$DEVICE"$resume_flag 2>&1 | tee -a "$run_log"
 
 echo "=== Pipeline finished at \$(date) ===" | tee -a "$run_log"
 ln -sfn "$run_log" "$LATEST_LOG_LINK"

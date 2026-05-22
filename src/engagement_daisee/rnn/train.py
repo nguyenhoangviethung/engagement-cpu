@@ -87,10 +87,12 @@ class EarlyStopping:
     best_score: float = field(default=-math.inf)
     bad_epochs: int = field(default=0)
 
-    def step(self, current_score: float) -> bool:
+    def step(self, current_score: float, epoch: int, min_epochs: int = 1) -> bool:
         if current_score > self.best_score + self.min_delta:
             self.best_score = current_score
             self.bad_epochs = 0
+            return False
+        if epoch < min_epochs:
             return False
         self.bad_epochs += 1
         return self.bad_epochs >= self.patience
@@ -618,9 +620,16 @@ def train(
     sampler_strategy: str = "weighted",
     normalize_features: bool = True,
     model_name: str = "gru",
+    hidden_size: int = HIDDEN_SIZE,
+    num_layers: int = MODEL_NUM_LAYERS,
+    dropout: float = DROPOUT,
     num_heads: int = 4,
     tcn_kernel_size: int = 3,
     tcn_blocks: int = 3,
+    batch_size: int = BATCH_SIZE,
+    epochs: int | None = None,
+    patience: int | None = None,
+    min_epochs: int = 1,
     cpu_threads: int = DEFAULT_CPU_THREADS,
     device_arg: str = DEVICE,
     amp_enabled: bool = True,
@@ -671,9 +680,10 @@ def train(
         val_indices = val_indices[: max(1, min(len(val_indices), BATCH_SIZE * 2))]
         test_indices = test_indices[: max(1, min(len(test_indices), BATCH_SIZE * 2))]
 
-    batch_size = BATCH_SIZE
-    epochs = SAMPLE_EPOCHS if sample else EPOCHS
-    patience = 2 if sample else EARLY_STOPPING_PATIENCE
+    batch_size = max(1, int(batch_size))
+    epochs = SAMPLE_EPOCHS if sample else int(epochs or EPOCHS)
+    patience = 2 if sample else int(patience or EARLY_STOPPING_PATIENCE)
+    min_epochs = 1 if sample else max(1, min(int(min_epochs), epochs))
 
     train_loader = _make_train_loader(
         dataset,
@@ -727,9 +737,9 @@ def train(
     model_kwargs = {
         "model_name": model_name,
         "input_size": sample_features.shape[-1],
-        "hidden_size": HIDDEN_SIZE,
-        "num_layers": MODEL_NUM_LAYERS,
-        "dropout": DROPOUT,
+        "hidden_size": int(hidden_size),
+        "num_layers": int(num_layers),
+        "dropout": float(dropout),
         "num_heads": num_heads,
         "kernel_size": tcn_kernel_size,
         "tcn_blocks": tcn_blocks,
@@ -972,7 +982,7 @@ def train(
         )
         torch.save(last_payload, last_checkpoint_path)
 
-        if early_stopping.step(objective_score):
+        if early_stopping.step(objective_score, epoch=epoch, min_epochs=min_epochs):
             LOGGER.info("Early stopping triggered at epoch %d", epoch)
             break
 
@@ -1033,6 +1043,10 @@ def train(
                 "device": str(device),
                 "amp_enabled": bool(amp_enabled and device.type == "cuda"),
                 "cpu_threads": int(resolved_threads),
+                "batch_size": int(batch_size),
+                "epochs": int(epochs),
+                "patience": int(patience),
+                "min_epochs": int(min_epochs),
                 "last_checkpoint_path": str(last_checkpoint_path),
                 "resume_from": str(resume_from) if resume_from is not None else None,
                 "best_objective_score": best_objective_score,
@@ -1126,6 +1140,9 @@ def parse_args() -> argparse.Namespace:
         ],
         help="Sequence model architecture",
     )
+    parser.add_argument("--hidden-size", type=int, default=HIDDEN_SIZE, help="Sequence model hidden dimension")
+    parser.add_argument("--num-layers", type=int, default=MODEL_NUM_LAYERS, help="GRU/Transformer layer count")
+    parser.add_argument("--dropout", type=float, default=DROPOUT, help="Dropout probability")
     parser.add_argument(
         "--num-heads",
         type=int,
@@ -1143,6 +1160,15 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=3,
         help="Number of dilated residual blocks used by TCN model",
+    )
+    parser.add_argument("--batch-size", type=int, default=BATCH_SIZE, help="Training and validation batch size")
+    parser.add_argument("--epochs", type=int, default=EPOCHS, help="Maximum training epochs")
+    parser.add_argument("--patience", type=int, default=EARLY_STOPPING_PATIENCE, help="Early-stopping patience")
+    parser.add_argument(
+        "--min-epochs",
+        type=int,
+        default=1,
+        help="Minimum epochs before early stopping can trigger",
     )
     parser.add_argument(
         "--cpu-threads",
@@ -1188,9 +1214,16 @@ def main() -> None:
         sampler_strategy=args.train_sampler,
         normalize_features=not args.no_normalize_features,
         model_name=args.model,
+        hidden_size=args.hidden_size,
+        num_layers=args.num_layers,
+        dropout=args.dropout,
         num_heads=args.num_heads,
         tcn_kernel_size=args.tcn_kernel_size,
         tcn_blocks=args.tcn_blocks,
+        batch_size=args.batch_size,
+        epochs=args.epochs,
+        patience=args.patience,
+        min_epochs=args.min_epochs,
         cpu_threads=args.cpu_threads,
         device_arg=args.device,
         amp_enabled=amp_enabled,

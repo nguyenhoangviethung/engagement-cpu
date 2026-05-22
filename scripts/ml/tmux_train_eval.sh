@@ -92,8 +92,8 @@ cd "$WORKDIR"
 set -euo pipefail
 
 echo "=== ML train+eval example started at \$(date) ===" | tee -a "$run_log"
-conda run --no-capture-output -n "$CONDA_ENV" env PYTHONPATH="$WORKDIR/src" python -m engagement_daisee.ml.train --help 2>&1 | tee -a "$run_log"
-conda run --no-capture-output -n "$CONDA_ENV" env PYTHONPATH="$WORKDIR/src" python -m engagement_daisee.ml.evaluate --help 2>&1 | tee -a "$run_log"
+"$WORKDIR/scripts/lib/run_python.sh" --env "$CONDA_ENV" --workdir "$WORKDIR" env PYTHONPATH="$WORKDIR/src" python -m engagement_daisee.ml.train --help 2>&1 | tee -a "$run_log"
+"$WORKDIR/scripts/lib/run_python.sh" --env "$CONDA_ENV" --workdir "$WORKDIR" env PYTHONPATH="$WORKDIR/src" python -m engagement_daisee.ml.evaluate --help 2>&1 | tee -a "$run_log"
 echo "=== ML train+eval example finished at \$(date) ===" | tee -a "$run_log"
 ln -sfn "$run_log" "$LATEST_LOG_LINK"
 EOF
@@ -111,7 +111,7 @@ echo "Backend: $BACKEND" | tee -a "$run_log"
 echo "Manifest: $MANIFEST" | tee -a "$run_log"
 echo "Model path: $model_path" | tee -a "$run_log"
 
-conda run --no-capture-output -n "$CONDA_ENV" env PYTHONPATH="$WORKDIR/src" python -m engagement_daisee.ml.train$sample_flag$threshold_flag \
+"$WORKDIR/scripts/lib/run_python.sh" --env "$CONDA_ENV" --workdir "$WORKDIR" env PYTHONPATH="$WORKDIR/src" python -m engagement_daisee.ml.train$sample_flag$threshold_flag \
   --manifest "$MANIFEST" \
   --output "$model_path" \
   --run-id "$active_run_id" \
@@ -119,7 +119,7 @@ conda run --no-capture-output -n "$CONDA_ENV" env PYTHONPATH="$WORKDIR/src" pyth
   --feature-mode "$FEATURE_MODE" \
   --cpu-workers "$CPU_WORKERS" 2>&1 | tee -a "$run_log"
 
-conda run --no-capture-output -n "$CONDA_ENV" env PYTHONPATH="$WORKDIR/src" python -m engagement_daisee.ml.evaluate \
+"$WORKDIR/scripts/lib/run_python.sh" --env "$CONDA_ENV" --workdir "$WORKDIR" env PYTHONPATH="$WORKDIR/src" python -m engagement_daisee.ml.evaluate \
   --manifest "$MANIFEST" \
   --model "$model_path" \
   --split "$SPLIT" \
@@ -127,7 +127,7 @@ conda run --no-capture-output -n "$CONDA_ENV" env PYTHONPATH="$WORKDIR/src" pyth
   --summary-json "$train_summary" \
   --output-json "$eval_json"$threshold_flag 2>&1 | tee -a "$run_log"
 
-conda run --no-capture-output -n "$CONDA_ENV" python - <<"PY" "$train_summary" "$eval_json" "$aggregate_json" "$history_jsonl" "$active_run_id" "$BACKEND" "$FEATURE_MODE" "$MANIFEST" "$model_path"
+"$WORKDIR/scripts/lib/run_python.sh" --env "$CONDA_ENV" --workdir "$WORKDIR" python - <<"PY" "$train_summary" "$eval_json" "$aggregate_json" "$history_jsonl" "$active_run_id" "$BACKEND" "$FEATURE_MODE" "$MANIFEST" "$model_path"
 import json
 import sys
 from pathlib import Path

@@ -102,7 +102,7 @@ echo "Run ID: $active_run_id" | tee -a "$run_log"
 echo "Run features dir: $run_features_dir" | tee -a "$run_log"
 echo "Run manifest: $run_manifest" | tee -a "$run_log"
 mkdir -p "$run_features_dir"
-conda run --no-capture-output -n "$CONDA_ENV" env PYTHONPATH="$WORKDIR/src" python -u -m engagement_daisee.rnn.extract_features$sample_flag --features-dir "$run_features_dir" --manifest "$run_manifest" --log-every "$LOG_EVERY" 2>&1 | tee -a "$run_log"
+"$WORKDIR/scripts/lib/run_python.sh" --env "$CONDA_ENV" --workdir "$WORKDIR" env PYTHONPATH="$WORKDIR/src" python -u -m engagement_daisee.rnn.extract_features$sample_flag --features-dir "$run_features_dir" --manifest "$run_manifest" --log-every "$LOG_EVERY" 2>&1 | tee -a "$run_log"
 echo "=== Extract finished at \$(date) ===" | tee -a "$run_log"
 ln -sfn "$run_log" "$LATEST_LOG_LINK"
 EOF

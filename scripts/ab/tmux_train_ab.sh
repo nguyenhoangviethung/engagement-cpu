@@ -147,7 +147,7 @@ echo "Config B: objective=balanced_accuracy, loss=focal(alpha=$FOCAL_ALPHA,gamma
 mkdir -p "$run_a_dir" "$run_b_dir"
 
 echo "[A/2] Training config A..." | tee -a "$run_log"
-conda run --no-capture-output -n "$CONDA_ENV" env PYTHONPATH="$WORKDIR/src" python -u -m engagement_daisee.rnn.train$sample_flag \\
+"$WORKDIR/scripts/lib/run_python.sh" --env "$CONDA_ENV" --workdir "$WORKDIR" env PYTHONPATH="$WORKDIR/src" python -u -m engagement_daisee.rnn.train$sample_flag \\
   --manifest "$MANIFEST_PATH" \\
   --output "$ckpt_a" \\
   --log-every "$LOG_EVERY" \\
@@ -156,7 +156,7 @@ conda run --no-capture-output -n "$CONDA_ENV" env PYTHONPATH="$WORKDIR/src" pyth
   --train-sampler "weighted" 2>&1 | tee -a "$run_log"
 
 echo "[B/2] Training config B..." | tee -a "$run_log"
-conda run --no-capture-output -n "$CONDA_ENV" env PYTHONPATH="$WORKDIR/src" python -u -m engagement_daisee.rnn.train$sample_flag \\
+"$WORKDIR/scripts/lib/run_python.sh" --env "$CONDA_ENV" --workdir "$WORKDIR" env PYTHONPATH="$WORKDIR/src" python -u -m engagement_daisee.rnn.train$sample_flag \\
   --manifest "$MANIFEST_PATH" \\
   --output "$ckpt_b" \\
   --log-every "$LOG_EVERY" \\

@@ -1,0 +1,42 @@
+{
+  "model_type": "xgboost",
+  "manifest": "data/processed/runs/pipeline_2/feature_manifest.local.csv",
+  "rows_used": 86039,
+  "sample": false,
+  "sample_videos": 10,
+  "selected_threshold": 0.09000000000000001,
+  "checkpoint_metric": "validation_f1_pos",
+  "validation_metrics": {
+    "accuracy": 0.49363191042687193,
+    "precision_neg": 1.0,
+    "recall_neg": 0.0019310344827586207,
+    "f1_neg": 0.003854625550660793,
+    "precision_pos": 0.49313533202577753,
+    "recall_pos": 1.0,
+    "f1_pos": 0.6605366860574217,
+    "balanced_accuracy": 0.5009655172413793,
+    "f2_pos": 0.8294844000377039,
+    "tp": 7040.0,
+    "tn": 14.0,
+    "fp": 7236.0,
+    "fn": 0.0
+  },
+  "test_metrics": {
+    "accuracy": 0.6974869342822195,
+    "precision_neg": 0.8888888888888888,
+    "recall_neg": 0.010200364298724954,
+    "f1_neg": 0.020169277867819198,
+    "precision_pos": 0.6968141494169503,
+    "recall_pos": 0.9994398207426376,
+    "f1_pos": 0.8211315296360827,
+    "balanced_accuracy": 0.5048200925206813,
+    "f2_pos": 0.9195664659018953,
+    "tp": 12489.0,
+    "tn": 56.0,
+    "fp": 5434.0,
+    "fn": 7.0
+  },
+  "best_iteration": 230,
+  "feature_mode": "tsfresh",
+  "cpu_workers": 2
+}

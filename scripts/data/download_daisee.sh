@@ -61,16 +61,16 @@ if [[ "$DRY_RUN" -eq 1 ]]; then
   exit 0
 fi
 
-if [[ ! -f "$HOME/.kaggle/kaggle.json" ]]; then
-  echo "ERROR: Missing Kaggle credentials at ~/.kaggle/kaggle.json"
-  echo "Please configure Kaggle API credentials first, then rerun this script."
+if [[ ! -f "$HOME/.kaggle/kaggle.json" && ! -f "$HOME/.kaggle/access_token" ]]; then
+  echo "ERROR: Missing Kaggle credentials."
+  echo "Expected either ~/.kaggle/kaggle.json or ~/.kaggle/access_token."
   exit 1
 fi
 
 mkdir -p "$(dirname "$TARGET_DIR")"
 
 echo "[1/4] Downloading dataset with kagglehub..."
-DOWNLOAD_PATH="$(conda run --no-capture-output -n "$CONDA_ENV" python - <<'PY'
+DOWNLOAD_PATH="$("$WORKDIR/scripts/lib/run_python.sh" --env "$CONDA_ENV" --workdir "$WORKDIR" python - <<'PY'
 from pathlib import Path
 import kagglehub
 

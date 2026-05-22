@@ -126,7 +126,7 @@ echo "Manifest: $MANIFEST_PATH" | tee -a "$run_log"
 echo "Checkpoint: $run_checkpoint" | tee -a "$run_log"
 echo "Objective: $THRESHOLD_OBJECTIVE (min_recall_pos=$MIN_RECALL_POS)" | tee -a "$run_log"
 mkdir -p "$run_checkpoint_dir"
-conda run --no-capture-output -n "$CONDA_ENV" env PYTHONPATH="$WORKDIR/src" python -u -m engagement_daisee.rnn.train$sample_flag \\
+"$WORKDIR/scripts/lib/run_python.sh" --env "$CONDA_ENV" --workdir "$WORKDIR" env PYTHONPATH="$WORKDIR/src" python -u -m engagement_daisee.rnn.train$sample_flag \\
   --manifest "$MANIFEST_PATH" \\
   --output "$run_checkpoint" \\
   --log-every "$LOG_EVERY" \\

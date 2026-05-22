@@ -57,7 +57,7 @@ cd "$WORKDIR"
 set -euo pipefail
 
 echo "=== CNN infer example started at \$(date) ===" | tee -a "$run_log"
-conda run --no-capture-output -n "$CONDA_ENV" env PYTHONPATH="$WORKDIR/src" python -m engagement_daisee.cnn.infer --help 2>&1 | tee -a "$run_log"
+"$WORKDIR/scripts/lib/run_python.sh" --env "$CONDA_ENV" --workdir "$WORKDIR" env PYTHONPATH="$WORKDIR/src" python -m engagement_daisee.cnn.infer --help 2>&1 | tee -a "$run_log"
 echo "=== CNN infer example finished at \$(date) ===" | tee -a "$run_log"
 ln -sfn "$run_log" "$LATEST_LOG_LINK"
 EOF
@@ -74,7 +74,7 @@ cd "$WORKDIR"
 set -euo pipefail
 
 echo "=== CNN infer started at \$(date) ===" | tee -a "$run_log"
-conda run --no-capture-output -n "$CONDA_ENV" env PYTHONPATH="$WORKDIR/src" python -m engagement_daisee.cnn.infer \\
+"$WORKDIR/scripts/lib/run_python.sh" --env "$CONDA_ENV" --workdir "$WORKDIR" env PYTHONPATH="$WORKDIR/src" python -m engagement_daisee.cnn.infer \\
   --checkpoint "$CHECKPOINT" \\
   --image "$IMAGE"$threshold_flag$image_size_flag 2>&1 | tee -a "$run_log"
 echo "=== CNN infer finished at \$(date) ===" | tee -a "$run_log"

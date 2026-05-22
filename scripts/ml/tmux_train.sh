@@ -86,7 +86,7 @@ cd "$WORKDIR"
 set -euo pipefail
 
 echo "=== ML train example started at \$(date) ===" | tee -a "$run_log"
-conda run --no-capture-output -n "$CONDA_ENV" env PYTHONPATH="$WORKDIR/src" python -m engagement_daisee.ml.train --help 2>&1 | tee -a "$run_log"
+"$WORKDIR/scripts/lib/run_python.sh" --env "$CONDA_ENV" --workdir "$WORKDIR" env PYTHONPATH="$WORKDIR/src" python -m engagement_daisee.ml.train --help 2>&1 | tee -a "$run_log"
 echo "=== ML train example finished at \$(date) ===" | tee -a "$run_log"
 ln -sfn "$run_log" "$LATEST_LOG_LINK"
 EOF
@@ -101,7 +101,7 @@ echo "=== ML train started at \$(date) ===" | tee -a "$run_log"
 echo "Run ID: $active_run_id" | tee -a "$run_log"
 echo "Run checkpoint: $run_checkpoint" | tee -a "$run_log"
 mkdir -p "$run_checkpoint_dir"
-conda run --no-capture-output -n "$CONDA_ENV" env PYTHONPATH="$WORKDIR/src" python -m engagement_daisee.ml.train$sample_flag$threshold_flag \\
+"$WORKDIR/scripts/lib/run_python.sh" --env "$CONDA_ENV" --workdir "$WORKDIR" env PYTHONPATH="$WORKDIR/src" python -m engagement_daisee.ml.train$sample_flag$threshold_flag \\
   --manifest "$MANIFEST" \\
   --output "$run_checkpoint" \\
   --run-id "$active_run_id" \\

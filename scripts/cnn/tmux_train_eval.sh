@@ -119,8 +119,8 @@ cd "$WORKDIR"
 set -euo pipefail
 
 echo "=== CNN train+eval example started at \$(date) ===" | tee -a "$run_log"
-conda run --no-capture-output -n "$CONDA_ENV" env PYTHONPATH="$WORKDIR/src" python -m engagement_daisee.cnn.train --help 2>&1 | tee -a "$run_log"
-conda run --no-capture-output -n "$CONDA_ENV" env PYTHONPATH="$WORKDIR/src" python -m engagement_daisee.cnn.evaluate --help 2>&1 | tee -a "$run_log"
+"$WORKDIR/scripts/lib/run_python.sh" --env "$CONDA_ENV" --workdir "$WORKDIR" env PYTHONPATH="$WORKDIR/src" python -m engagement_daisee.cnn.train --help 2>&1 | tee -a "$run_log"
+"$WORKDIR/scripts/lib/run_python.sh" --env "$CONDA_ENV" --workdir "$WORKDIR" env PYTHONPATH="$WORKDIR/src" python -m engagement_daisee.cnn.evaluate --help 2>&1 | tee -a "$run_log"
 echo "=== CNN train+eval example finished at \$(date) ===" | tee -a "$run_log"
 ln -sfn "$run_log" "$LATEST_LOG_LINK"
 EOF
@@ -138,7 +138,7 @@ echo "Model: $MODEL_NAME" | tee -a "$run_log"
 echo "Manifest: $MANIFEST" | tee -a "$run_log"
 echo "Checkpoint: $checkpoint" | tee -a "$run_log"
 
-conda run --no-capture-output -n "$CONDA_ENV" env PYTHONPATH="$WORKDIR/src" python -u -m engagement_daisee.cnn.train$sample_flag \
+"$WORKDIR/scripts/lib/run_python.sh" --env "$CONDA_ENV" --workdir "$WORKDIR" env PYTHONPATH="$WORKDIR/src" python -u -m engagement_daisee.cnn.train$sample_flag \
   --manifest "$MANIFEST" \
   --output "$checkpoint" \
   --model "$MODEL_NAME" \
@@ -151,14 +151,14 @@ conda run --no-capture-output -n "$CONDA_ENV" env PYTHONPATH="$WORKDIR/src" pyth
   --train-sampler "$TRAIN_SAMPLER" \
   --run-id "$active_run_id"$pretrained_flag$freeze_flag 2>&1 | tee -a "$run_log"
 
-conda run --no-capture-output -n "$CONDA_ENV" env PYTHONPATH="$WORKDIR/src" python -m engagement_daisee.cnn.evaluate \
+"$WORKDIR/scripts/lib/run_python.sh" --env "$CONDA_ENV" --workdir "$WORKDIR" env PYTHONPATH="$WORKDIR/src" python -m engagement_daisee.cnn.evaluate \
   --manifest "$MANIFEST" \
   --checkpoint "$checkpoint" \
   --split "$SPLIT" \
   --batch-size "$EVAL_BATCH_SIZE" \
   --output-json "$eval_json"$threshold_flag 2>&1 | tee -a "$run_log"
 
-conda run --no-capture-output -n "$CONDA_ENV" python - <<"PY" "$train_summary" "$eval_json" "$aggregate_json" "$history_jsonl" "$active_run_id" "$MODEL_NAME" "$MANIFEST" "$checkpoint"
+"$WORKDIR/scripts/lib/run_python.sh" --env "$CONDA_ENV" --workdir "$WORKDIR" python - <<"PY" "$train_summary" "$eval_json" "$aggregate_json" "$history_jsonl" "$active_run_id" "$MODEL_NAME" "$MANIFEST" "$checkpoint"
 import json
 import sys
 from pathlib import Path

@@ -1,0 +1,35 @@
+{
+  "manifest": "data/processed/runs/pipeline_2/feature_manifest.local.csv",
+  "checkpoint": "/home/bear/engagement-cpu/scripts/../checkpoints/runs/train_all_run_id_2_20260522_172051/rnn_tcn/engagement_gru.pt",
+  "split": "test",
+  "rows": 17986,
+  "batch_size": 128,
+  "threshold": 0.2599999999999999,
+  "loss": 0.9418366789141764,
+  "metrics": {
+    "accuracy": 0.576225953519404,
+    "precision_pos": 0.7306018168054504,
+    "recall_pos": 0.6178777208706786,
+    "f1_pos": 0.6695282691640652,
+    "precision_neg": 0.35629549743866273,
+    "recall_neg": 0.4814207650273224,
+    "f1_neg": 0.40951348001239546,
+    "balanced_accuracy": 0.5496492429490005,
+    "f1_macro": 0.5395208745882303,
+    "tp": 7721.0,
+    "tn": 2643.0,
+    "fp": 2847.0,
+    "fn": 4775.0
+  },
+  "model_kwargs": {
+    "model_name": "tcn",
+    "input_size": 90,
+    "hidden_size": 128,
+    "num_layers": 2,
+    "dropout": 0.3,
+    "num_heads": 4,
+    "kernel_size": 3,
+    "tcn_blocks": 3,
+    "max_seq_len": 30
+  }
+}
