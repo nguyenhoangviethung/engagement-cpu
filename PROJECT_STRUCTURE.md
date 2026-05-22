@@ -1,31 +1,29 @@
 # Project Structure
 
-## Canonical Source Code
-- `src/engagement_daisee/common/`: shared config and constants.
-- `src/engagement_daisee/rnn/`: MediaPipe + GRU engagement pipeline.
-- `src/engagement_daisee/cnn/`: CNN baseline pipeline.
-- `src/engagement_daisee/ml/`: classical ML baseline (XGBoost).
+## Canonical Source Tree
 
-## Root Compatibility Wrappers
-These files remain in root to keep old commands/scripts working:
-- `config.py`
-- `preprocess_labels.py`
-- `extract_features.py`
-- `dataset.py`
-- `model.py`
-- `train.py`
-- `cnn_extract_frames.py`
-- `cnn_dataset.py`
-- `cnn_model.py`
-- `train_cnn.py`
-- `train_ml.py`
+- `src/engagement_daisee/common/`
+  - shared config/constants (`config.py`)
+- `src/engagement_daisee/rnn/`
+  - sequence pipeline based on MediaPipe features
+  - `models/` now contains each architecture separately:
+    - `gru.py`: `EngagementGRU` (BiGRU+Attention) + `BasicGRUClassifier` (GRU cơ bản)
+    - `tcn.py`: `EngagementTCN` (1D-CNN/TCN)
+    - `transformer.py`: `EngagementTinyTransformer`
+    - `builder.py`: unified model factory `build_sequence_model`
+  - `model.py`: compatibility facade for old imports
+  - `train.py`, `evaluate.py`, `infer.py`, `optimize_inference.py`, `dataset.py`, `extract_features.py`, `preprocess_labels.py`
+- `src/engagement_daisee/ml/`
+  - TS-Fresh-like feature engineering + tree models (LightGBM/XGBoost)
+- `src/engagement_daisee/cnn/`
+  - frame-based CNN baseline
 
-They forward execution/imports to `src/engagement_daisee/...`.
+## Compatibility Notes
 
-## Script Options by Module
-- `scripts/rnn/`: tmux scripts for RNN/MediaPipe pipeline.
-- `scripts/cnn/`: tmux scripts for CNN baseline pipeline.
-- `scripts/ml/`: tmux scripts for ML baseline pipeline.
-- `scripts/ab/`: tmux scripts for A/B experiments.
-
-Legacy script paths in `scripts/*.sh` are still preserved.
+- Existing code importing `engagement_daisee.rnn.model` still works.
+- New code should prefer `engagement_daisee.rnn.models.*`.
+- Model name aliases in RNN training:
+  - `gru`
+  - `gru_basic` / `simple_gru`
+  - `tcn` / `1dcnn` / `temporal_cnn`
+  - `transformer` / `tiny_transformer`

@@ -1,4 +1,5 @@
 import argparse
+from contextlib import nullcontext
 import json
 import logging
 import math
@@ -34,7 +35,7 @@ from engagement_daisee.common.config import (
     WEIGHT_DECAY,
 )
 from engagement_daisee.rnn.dataset import FeatureSequenceDataset
-from engagement_daisee.rnn.model import build_sequence_model
+from engagement_daisee.rnn.models.builder import build_sequence_model
 
 
 LOGGER = logging.getLogger("train")
@@ -99,6 +100,17 @@ def _set_seed(seed: int) -> None:
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+
+
+def _resolve_device(device_arg: str) -> torch.device:
+    normalized = device_arg.strip().lower()
+    if normalized == "auto":
+        return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    if normalized.startswith("cuda") and not torch.cuda.is_available():
+        raise RuntimeError(f"Requested --device {device_arg} but CUDA is not available.")
+    return torch.device(device_arg)
 
 
 def _official_split_indices(manifest: pd.DataFrame) -> tuple[list[int], list[int], list[int]]:
@@ -274,7 +286,13 @@ def _is_better_for_objective(
             return candidate["balanced_accuracy"] > incumbent["balanced_accuracy"] + 1e-8
     return False
 
-def _make_loader(dataset: FeatureSequenceDataset, indices: list[int], batch_size: int, shuffle: bool) -> DataLoader:
+def _make_loader(
+    dataset: FeatureSequenceDataset,
+    indices: list[int],
+    batch_size: int,
+    shuffle: bool,
+    pin_memory: bool,
+) -> DataLoader:
     subset = Subset(dataset, indices)
     return DataLoader(
         subset,
@@ -282,7 +300,7 @@ def _make_loader(dataset: FeatureSequenceDataset, indices: list[int], batch_size
         shuffle=shuffle,
         num_workers=NUM_WORKERS,
         persistent_workers=True if NUM_WORKERS > 0 else False,
-        pin_memory=False,
+        pin_memory=pin_memory,
         drop_last=False,
     )
 
@@ -293,6 +311,7 @@ def _make_train_loader(
     indices: list[int],
     batch_size: int,
     sampler_strategy: str = "weighted",
+    pin_memory: bool = False,
 ) -> DataLoader:
     subset = Subset(dataset, indices)
     labels = manifest_df.iloc[indices]["label"].astype(int).to_numpy()
@@ -318,7 +337,7 @@ def _make_train_loader(
             shuffle=True,
             num_workers=NUM_WORKERS,
             persistent_workers=True if NUM_WORKERS > 0 else False,
-            pin_memory=False,
+            pin_memory=pin_memory,
             drop_last=False,
         )
 
@@ -337,7 +356,7 @@ def _make_train_loader(
         shuffle=False,
         num_workers=NUM_WORKERS,
         persistent_workers=True if NUM_WORKERS > 0 else False,
-        pin_memory=False,
+        pin_memory=pin_memory,
         drop_last=False,
     )
 
@@ -400,10 +419,12 @@ def _build_model(
     dropout: float,
     num_layers: int = MODEL_NUM_LAYERS,
     num_heads: int = 4,
-    tcn_kernel_size: int = 3,
+    kernel_size: int = 3,
+    tcn_kernel_size: int | None = None,
     tcn_blocks: int = 3,
     max_seq_len: int = 64,
 ) -> nn.Module:
+    resolved_kernel_size = int(tcn_kernel_size) if tcn_kernel_size is not None else int(kernel_size)
     return build_sequence_model(
         model_name=model_name,
         input_size=input_size,
@@ -411,7 +432,7 @@ def _build_model(
         num_layers=num_layers,
         dropout=dropout,
         num_heads=num_heads,
-        kernel_size=tcn_kernel_size,
+        kernel_size=resolved_kernel_size,
         tcn_blocks=tcn_blocks,
         max_seq_len=max_seq_len,
     )
@@ -422,7 +443,9 @@ def _train_one_epoch(
     loader,
     criterion,
     optimizer,
-    device,
+    device: torch.device,
+    amp_enabled: bool = False,
+    scaler: torch.cuda.amp.GradScaler | None = None,
     threshold: float = 0.5,
     feature_mean: torch.Tensor | None = None,
     feature_std: torch.Tensor | None = None,
@@ -440,11 +463,25 @@ def _train_one_epoch(
         labels = labels.to(device)
 
         optimizer.zero_grad(set_to_none=True)
-        logits = model(features)
-        loss = criterion(logits, labels)
-        loss.backward()
-        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=GRAD_CLIP_NORM)
-        optimizer.step()
+        autocast_ctx = (
+            torch.autocast(device_type=device.type, dtype=torch.float16)
+            if amp_enabled and device.type == "cuda"
+            else nullcontext()
+        )
+        with autocast_ctx:
+            logits = model(features)
+            loss = criterion(logits, labels)
+
+        if scaler is not None and amp_enabled and device.type == "cuda":
+            scaler.scale(loss).backward()
+            scaler.unscale_(optimizer)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=GRAD_CLIP_NORM)
+            scaler.step(optimizer)
+            scaler.update()
+        else:
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=GRAD_CLIP_NORM)
+            optimizer.step()
 
         batch_size = labels.size(0)
         running_loss += float(loss.item()) * batch_size
@@ -466,10 +503,11 @@ def _evaluate(
     model,
     loader,
     criterion,
-    device,
+    device: torch.device,
     threshold: float,
     feature_mean: torch.Tensor | None = None,
     feature_std: torch.Tensor | None = None,
+    amp_enabled: bool = False,
 ):
     model.eval()
     running_loss = 0.0
@@ -482,8 +520,14 @@ def _evaluate(
         if feature_mean is not None and feature_std is not None:
             features = (features - feature_mean) / feature_std
         labels = labels.to(device)
-        logits = model(features)
-        loss = criterion(logits, labels)
+        autocast_ctx = (
+            torch.autocast(device_type=device.type, dtype=torch.float16)
+            if amp_enabled and device.type == "cuda"
+            else nullcontext()
+        )
+        with autocast_ctx:
+            logits = model(features)
+            loss = criterion(logits, labels)
 
         batch_size = labels.size(0)
         running_loss += float(loss.item()) * batch_size
@@ -498,6 +542,65 @@ def _evaluate(
     stacked_labels = np.concatenate(all_labels).astype(np.int64)
     metrics = _compute_binary_metrics(stacked_labels, stacked_probabilities, threshold=threshold)
     return average_loss, metrics, stacked_labels, stacked_probabilities
+
+
+def _build_checkpoint_payload(
+    *,
+    model: nn.Module,
+    model_kwargs: dict,
+    model_name: str,
+    epoch: int,
+    optimizer: torch.optim.Optimizer,
+    scheduler: torch.optim.lr_scheduler.ReduceLROnPlateau,
+    scaler: torch.cuda.amp.GradScaler,
+    early_stopping: EarlyStopping,
+    best_threshold: float,
+    threshold_objective: str,
+    min_recall_pos: float,
+    loss_name: str,
+    criterion_config: dict[str, float],
+    sampler_strategy: str,
+    normalize_features: bool,
+    feature_mean_list: list[float] | None,
+    feature_std_list: list[float] | None,
+    best_objective_score: float,
+    best_val_precision_pos: float,
+    best_val_balanced_accuracy: float,
+    best_val_f1_macro: float,
+    best_val_metrics_for_objective: dict[str, float] | None,
+    history: list[dict],
+    device: torch.device,
+    amp_enabled: bool,
+    cpu_threads: int,
+) -> dict:
+    return {
+        "epoch": int(epoch),
+        "model_state_dict": model.state_dict(),
+        "model_kwargs": model_kwargs,
+        "model_name": model_name,
+        "optimizer_state_dict": optimizer.state_dict(),
+        "scheduler_state_dict": scheduler.state_dict(),
+        "scaler_state_dict": scaler.state_dict() if scaler is not None else None,
+        "early_stopping_bad_epochs": int(early_stopping.bad_epochs),
+        "best_threshold": best_threshold,
+        "threshold_objective": threshold_objective,
+        "min_recall_pos": min_recall_pos,
+        "loss_name": loss_name,
+        "criterion_config": criterion_config,
+        "sampler_strategy": sampler_strategy,
+        "normalize_features": normalize_features,
+        "device": str(device),
+        "amp_enabled": bool(amp_enabled and device.type == "cuda"),
+        "cpu_threads": int(cpu_threads),
+        "feature_mean": feature_mean_list,
+        "feature_std": feature_std_list,
+        "best_objective_score": best_objective_score,
+        "best_val_precision_pos": best_val_precision_pos,
+        "best_val_balanced_accuracy": best_val_balanced_accuracy,
+        "best_val_f1_macro": best_val_f1_macro,
+        "best_val_metrics_for_objective": best_val_metrics_for_objective,
+        "history": history,
+    }
 
 
 def train(
@@ -519,8 +622,12 @@ def train(
     tcn_kernel_size: int = 3,
     tcn_blocks: int = 3,
     cpu_threads: int = DEFAULT_CPU_THREADS,
+    device_arg: str = DEVICE,
+    amp_enabled: bool = True,
+    resume_from: Path | None = None,
 ) -> Path:
     _set_seed(seed)
+    device = _resolve_device(device_arg)
     resolved_threads = max(1, min(cpu_threads, os.cpu_count() or cpu_threads))
     torch.set_num_threads(resolved_threads)
     try:
@@ -531,7 +638,7 @@ def train(
     manifest_csv = _resolve_manifest_path(manifest_csv, run_id)
 
     LOGGER.info(
-        "Starting training | manifest=%s | output=%s | sample=%s | seed=%d | model=%s | cpu_threads=%d | threshold_objective=%s | min_recall_pos=%.2f | loss=%s | sampler=%s | normalize=%s",
+        "Starting training | manifest=%s | output=%s | sample=%s | seed=%d | model=%s | cpu_threads=%d | threshold_objective=%s | min_recall_pos=%.2f | loss=%s | sampler=%s | normalize=%s | resume_from=%s",
         manifest_csv,
         output_path,
         sample,
@@ -543,7 +650,9 @@ def train(
         loss_name,
         sampler_strategy,
         normalize_features,
+        str(resume_from) if resume_from is not None else None,
     )
+    LOGGER.info("Resolved device=%s | amp_enabled=%s", device, amp_enabled)
 
     dataset = FeatureSequenceDataset(manifest_csv)
     manifest_df = dataset.manifest
@@ -572,9 +681,10 @@ def train(
         train_indices,
         batch_size=batch_size,
         sampler_strategy=sampler_strategy,
+        pin_memory=(device.type == "cuda"),
     )
-    val_loader = _make_loader(dataset, val_indices, batch_size=batch_size, shuffle=False)
-    test_loader = _make_loader(dataset, test_indices, batch_size=batch_size, shuffle=False)
+    val_loader = _make_loader(dataset, val_indices, batch_size=batch_size, shuffle=False, pin_memory=(device.type == "cuda"))
+    test_loader = _make_loader(dataset, test_indices, batch_size=batch_size, shuffle=False, pin_memory=(device.type == "cuda"))
 
     LOGGER.info(
         "Data splits | train=%d | validation=%d | test=%d | batch_size=%d",
@@ -604,8 +714,8 @@ def train(
     feature_std = None
     if normalize_features:
         mean_cpu, std_cpu = _compute_feature_stats(dataset, train_indices)
-        feature_mean = mean_cpu.to(DEVICE).view(1, 1, -1)
-        feature_std = std_cpu.to(DEVICE).view(1, 1, -1)
+        feature_mean = mean_cpu.to(device).view(1, 1, -1)
+        feature_std = std_cpu.to(device).view(1, 1, -1)
         LOGGER.info(
             "Feature normalization enabled | mean_abs=%.6f | std_min=%.6f | std_median=%.6f",
             float(mean_cpu.abs().mean().item()),
@@ -621,18 +731,18 @@ def train(
         "num_layers": MODEL_NUM_LAYERS,
         "dropout": DROPOUT,
         "num_heads": num_heads,
-        "tcn_kernel_size": tcn_kernel_size,
+        "kernel_size": tcn_kernel_size,
         "tcn_blocks": tcn_blocks,
         "max_seq_len": int(sample_features.shape[0]),
     }
-    model = _build_model(**model_kwargs).to(DEVICE)
+    model = _build_model(**model_kwargs).to(device)
     criterion, criterion_config = _build_criterion(
         loss_name=loss_name,
         positives=positives,
         negatives=negatives,
         focal_alpha=focal_alpha,
         focal_gamma=focal_gamma,
-        device=DEVICE,
+        device=str(device),
     )
     LOGGER.info("Criterion config: %s", criterion_config)
     optimizer = torch.optim.AdamW(model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
@@ -643,8 +753,10 @@ def train(
         patience=LR_SCHEDULER_PATIENCE,
     )
     early_stopping = EarlyStopping(patience=patience)
+    scaler = torch.cuda.amp.GradScaler(enabled=(amp_enabled and device.type == "cuda"))
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    last_checkpoint_path = output_path.with_name(f"{output_path.stem}.last.pt")
 
     best_val_precision_pos = -math.inf
     best_val_balanced_accuracy = -math.inf
@@ -653,13 +765,59 @@ def train(
     best_val_metrics_for_objective: dict[str, float] | None = None
     history = []
     best_objective_score = -math.inf
-    for epoch in range(1, epochs + 1):
+    start_epoch = 1
+
+    if resume_from is not None:
+        if not resume_from.exists():
+            raise FileNotFoundError(f"Resume checkpoint not found: {resume_from}")
+        resume_ckpt = torch.load(resume_from, map_location=device)
+        resume_model_kwargs = resume_ckpt.get("model_kwargs", model_kwargs)
+        if resume_model_kwargs != model_kwargs:
+            LOGGER.warning("Resume checkpoint model kwargs differ; using checkpoint model kwargs: %s", resume_model_kwargs)
+            model_kwargs = resume_model_kwargs
+            model = _build_model(**model_kwargs).to(device)
+        model.load_state_dict(resume_ckpt["model_state_dict"])
+
+        if "optimizer_state_dict" in resume_ckpt:
+            optimizer.load_state_dict(resume_ckpt["optimizer_state_dict"])
+        if "scheduler_state_dict" in resume_ckpt:
+            scheduler.load_state_dict(resume_ckpt["scheduler_state_dict"])
+        if resume_ckpt.get("scaler_state_dict") is not None:
+            scaler.load_state_dict(resume_ckpt["scaler_state_dict"])
+
+        history = resume_ckpt.get("history", history)
+        best_threshold = float(resume_ckpt.get("best_threshold", best_threshold))
+        best_objective_score = float(resume_ckpt.get("best_objective_score", best_objective_score))
+        best_val_precision_pos = float(resume_ckpt.get("best_val_precision_pos", best_val_precision_pos))
+        best_val_balanced_accuracy = float(resume_ckpt.get("best_val_balanced_accuracy", best_val_balanced_accuracy))
+        best_val_f1_macro = float(resume_ckpt.get("best_val_f1_macro", best_val_f1_macro))
+        restored_best_metrics = resume_ckpt.get("best_val_metrics_for_objective")
+        if isinstance(restored_best_metrics, dict):
+            best_val_metrics_for_objective = restored_best_metrics
+        if best_objective_score > -math.inf:
+            early_stopping.best_score = best_objective_score
+        early_stopping.bad_epochs = int(resume_ckpt.get("early_stopping_bad_epochs", 0))
+
+        completed_epoch = int(resume_ckpt.get("epoch", 0))
+        start_epoch = completed_epoch + 1
+        if start_epoch > epochs:
+            LOGGER.warning(
+                "Resume checkpoint already at epoch=%d while requested epochs=%d. "
+                "No additional epochs will run.",
+                completed_epoch,
+                epochs,
+            )
+        LOGGER.info("Resuming training from checkpoint=%s | completed_epoch=%d | next_epoch=%d", resume_from, completed_epoch, start_epoch)
+
+    for epoch in range(start_epoch, epochs + 1):
         train_loss, train_metrics = _train_one_epoch(
             model,
             train_loader,
             criterion,
             optimizer,
-            DEVICE,
+            device,
+            amp_enabled=amp_enabled,
+            scaler=scaler,
             threshold=0.5,
             feature_mean=feature_mean,
             feature_std=feature_std,
@@ -668,10 +826,11 @@ def train(
             model,
             val_loader,
             criterion,
-            DEVICE,
+            device,
             threshold=0.5,
             feature_mean=feature_mean,
             feature_std=feature_std,
+            amp_enabled=amp_enabled,
         )
         epoch_threshold, val_metrics = _find_best_threshold(
             val_labels,
@@ -734,6 +893,9 @@ def train(
             min_recall_pos=min_recall_pos,
         )
 
+        feature_mean_list = mean_cpu.numpy().tolist() if normalize_features else None
+        feature_std_list = std_cpu.numpy().tolist() if normalize_features else None
+
         should_save_checkpoint = (
             best_val_metrics_for_objective is None
             or _is_better_for_objective(
@@ -750,38 +912,85 @@ def train(
             best_threshold = epoch_threshold
             best_val_metrics_for_objective = val_metrics.copy()
             best_objective_score = objective_score
-            torch.save(
-                {
-                    "model_state_dict": model.state_dict(),
-                    "model_kwargs": model_kwargs,
-                    "model_name": model_name,
-                    "best_threshold": best_threshold,
-                    "threshold_objective": threshold_objective,
-                    "min_recall_pos": min_recall_pos,
-                    "loss_name": loss_name,
-                    "criterion_config": criterion_config,
-                    "sampler_strategy": sampler_strategy,
-                    "normalize_features": normalize_features,
-                    "feature_mean": mean_cpu.numpy().tolist() if normalize_features else None,
-                    "feature_std": std_cpu.numpy().tolist() if normalize_features else None,
-                    "best_objective_score": best_objective_score,
-                    "best_val_precision_pos": best_val_precision_pos,
-                    "best_val_balanced_accuracy": best_val_balanced_accuracy,
-                    "best_val_f1_macro": best_val_f1_macro,
-                    "history": history,
-                },
-                output_path,
+            best_payload = _build_checkpoint_payload(
+                model=model,
+                model_kwargs=model_kwargs,
+                model_name=model_name,
+                epoch=epoch,
+                optimizer=optimizer,
+                scheduler=scheduler,
+                scaler=scaler,
+                early_stopping=early_stopping,
+                best_threshold=best_threshold,
+                threshold_objective=threshold_objective,
+                min_recall_pos=min_recall_pos,
+                loss_name=loss_name,
+                criterion_config=criterion_config,
+                sampler_strategy=sampler_strategy,
+                normalize_features=normalize_features,
+                feature_mean_list=feature_mean_list,
+                feature_std_list=feature_std_list,
+                best_objective_score=best_objective_score,
+                best_val_precision_pos=best_val_precision_pos,
+                best_val_balanced_accuracy=best_val_balanced_accuracy,
+                best_val_f1_macro=best_val_f1_macro,
+                best_val_metrics_for_objective=best_val_metrics_for_objective,
+                history=history,
+                device=device,
+                amp_enabled=amp_enabled,
+                cpu_threads=resolved_threads,
             )
+            torch.save(best_payload, output_path)
+
+        last_payload = _build_checkpoint_payload(
+            model=model,
+            model_kwargs=model_kwargs,
+            model_name=model_name,
+            epoch=epoch,
+            optimizer=optimizer,
+            scheduler=scheduler,
+            scaler=scaler,
+            early_stopping=early_stopping,
+            best_threshold=best_threshold,
+            threshold_objective=threshold_objective,
+            min_recall_pos=min_recall_pos,
+            loss_name=loss_name,
+            criterion_config=criterion_config,
+            sampler_strategy=sampler_strategy,
+            normalize_features=normalize_features,
+            feature_mean_list=feature_mean_list,
+            feature_std_list=feature_std_list,
+            best_objective_score=best_objective_score,
+            best_val_precision_pos=best_val_precision_pos,
+            best_val_balanced_accuracy=best_val_balanced_accuracy,
+            best_val_f1_macro=best_val_f1_macro,
+            best_val_metrics_for_objective=best_val_metrics_for_objective,
+            history=history,
+            device=device,
+            amp_enabled=amp_enabled,
+            cpu_threads=resolved_threads,
+        )
+        torch.save(last_payload, last_checkpoint_path)
 
         if early_stopping.step(objective_score):
             LOGGER.info("Early stopping triggered at epoch %d", epoch)
             break
 
-    checkpoint = torch.load(output_path, map_location=DEVICE)
+    if not output_path.exists():
+        if last_checkpoint_path.exists():
+            LOGGER.warning("Best checkpoint not found; falling back to last checkpoint: %s", last_checkpoint_path)
+            torch.save(torch.load(last_checkpoint_path, map_location=device), output_path)
+        elif resume_from is not None and resume_from.exists():
+            LOGGER.warning("Best checkpoint not found; falling back to resume checkpoint: %s", resume_from)
+            torch.save(torch.load(resume_from, map_location=device), output_path)
+        else:
+            raise FileNotFoundError(f"No checkpoint available to evaluate. Expected: {output_path}")
+
+    checkpoint = torch.load(output_path, map_location=device)
     checkpoint_model_kwargs = checkpoint.get("model_kwargs", model_kwargs)
     if checkpoint_model_kwargs != model_kwargs:
         LOGGER.info("Reloading model with checkpoint architecture: %s", checkpoint_model_kwargs)
-        model = _build_model(**checkpoint_model_kwargs).to(DEVICE)
+        model = _build_model(**checkpoint_model_kwargs).to(device)
     model.load_state_dict(checkpoint["model_state_dict"])
     best_threshold = float(checkpoint.get("best_threshold", best_threshold))
 
@@ -789,10 +998,11 @@ def train(
         model,
         test_loader,
         criterion,
-        DEVICE,
+        device,
         threshold=best_threshold,
         feature_mean=feature_mean,
         feature_std=feature_std,
+        amp_enabled=amp_enabled,
     )
     LOGGER.info(
         "Test metrics | loss=%.4f acc=%.4f prec1=%.4f bal_acc=%.4f rec1=%.4f rec0=%.4f f1_macro=%.4f threshold=%.2f",
@@ -820,6 +1030,11 @@ def train(
                 "criterion_config": criterion_config,
                 "sampler_strategy": sampler_strategy,
                 "normalize_features": normalize_features,
+                "device": str(device),
+                "amp_enabled": bool(amp_enabled and device.type == "cuda"),
+                "cpu_threads": int(resolved_threads),
+                "last_checkpoint_path": str(last_checkpoint_path),
+                "resume_from": str(resume_from) if resume_from is not None else None,
                 "best_objective_score": best_objective_score,
                 "test_loss": test_loss,
                 "test_accuracy": test_metrics["accuracy"],
@@ -838,10 +1053,16 @@ def train(
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Train CPU-only engagement models (GRU / 1D-TCN / Tiny Transformer).")
+    parser = argparse.ArgumentParser(description="Train engagement sequence models on GPU/CPU, then export for CPU inference.")
     parser.add_argument("--manifest", type=Path, default=FEATURE_MANIFEST_CSV, help="Feature manifest CSV")
     parser.add_argument("--output", type=Path, default=MODEL_CHECKPOINT_PATH, help="Model checkpoint path")
     parser.add_argument("--sample", action="store_true", help="Run a tiny 2-epoch test training loop")
+    parser.add_argument(
+        "--resume-from",
+        type=Path,
+        default=None,
+        help="Resume training from checkpoint (.last.pt or .pt)",
+    )
     parser.add_argument("--seed", type=int, default=RANDOM_SEED, help="Random seed")
     parser.add_argument("--log-every", type=int, default=1, help="Log progress every N epochs")
     parser.add_argument("--run-id", type=str, default=None, help="Run id used to resolve run-scoped manifests")
@@ -893,7 +1114,16 @@ def parse_args() -> argparse.Namespace:
         "--model",
         type=str,
         default="gru",
-        choices=["gru", "tcn", "transformer"],
+        choices=[
+            "gru",
+            "gru_basic",
+            "simple_gru",
+            "tcn",
+            "1dcnn",
+            "temporal_cnn",
+            "transformer",
+            "tiny_transformer",
+        ],
         help="Sequence model architecture",
     )
     parser.add_argument(
@@ -920,12 +1150,29 @@ def parse_args() -> argparse.Namespace:
         default=DEFAULT_CPU_THREADS,
         help="Maximum CPU compute threads for PyTorch (recommended: 1-2)",
     )
+    parser.add_argument(
+        "--device",
+        type=str,
+        default="auto",
+        help="Training device: auto | cpu | cuda | cuda:0 ...",
+    )
+    parser.add_argument(
+        "--amp",
+        action="store_true",
+        help="Enable mixed precision when using CUDA",
+    )
+    parser.add_argument(
+        "--no-amp",
+        action="store_true",
+        help="Force disable mixed precision",
+    )
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
     _setup_logging()
+    amp_enabled = (not args.no_amp) and (args.amp or args.device == "auto" or args.device.startswith("cuda"))
     checkpoint_path = train(
         args.manifest,
         args.output,
@@ -945,6 +1192,9 @@ def main() -> None:
         tcn_kernel_size=args.tcn_kernel_size,
         tcn_blocks=args.tcn_blocks,
         cpu_threads=args.cpu_threads,
+        device_arg=args.device,
+        amp_enabled=amp_enabled,
+        resume_from=args.resume_from,
     )
     LOGGER.info("Saved checkpoint to %s", checkpoint_path)
 

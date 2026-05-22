@@ -1,267 +1,140 @@
-# Engagement Detection with DAiSEE
+# Engagement_DAiSEE
 
-This repository implements a CPU-friendly, engagement-only pipeline for the DAiSEE dataset using PyTorch and MediaPipe.
+## 1) Mục tiêu chạy thực tế
 
-## Overview
+Bạn muốn:
+- train + eval trong **cùng 1 tmux session**
+- tự lưu JSON để so sánh run
+- có 1 script tổng chạy hết model qua đêm
 
-- **Task:** Binary classification for engagement only
-- **Data:** DAiSEE dataset from Kaggle (`olgaparfenova/daisee`)
-- **Features:** MediaPipe face mesh extracting EAR, MAR, head-pose proxy, and landmark coordinates
-- **Model:** Lightweight GRU with dropout and sigmoid output
-- **Mode:** CPU-only training and inference
+Repo hiện đã hỗ trợ đúng theo luồng đó.
 
-## Environment
+## 2) Dữ liệu đang dùng
 
-Use the conda environment named `thesis`.
+Bạn đang dùng processed data tại:
+- `data/processed/runs/pipeline_2/feature_manifest.csv`
+- `data/processed/runs/pipeline_2/features/`
 
-```bash
-conda run -n thesis python --version
-```
+Với `rnn` và `ml`, có thể train/eval trực tiếp từ đây, không cần re-process.
 
-Do not use or depend on `.venv` in this workspace.
+## 3) Cấu trúc model (đã tách rõ)
 
-## Dependencies
+- `src/engagement_daisee/rnn/models/gru.py`
+  - `gru` (BiGRU + attention, model chính)
+  - `gru_basic` / `simple_gru` (GRU cơ bản, giữ lại để baseline)
+- `src/engagement_daisee/rnn/models/tcn.py`
+  - `tcn` / `1dcnn` / `temporal_cnn`
+- `src/engagement_daisee/rnn/models/transformer.py`
+  - `transformer` / `tiny_transformer`
+- `src/engagement_daisee/rnn/models/builder.py`
+  - factory build model
 
-Install the required packages in the `thesis` environment.
+## 4) Script train+eval theo từng module (cùng tmux)
 
-```bash
-conda run -n thesis python -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
-conda run -n thesis python -m pip install mediapipe opencv-python pandas numpy kagglehub
-```
-
-## Dataset Download
-
-The DAiSEE dataset should be downloaded using `kagglehub` and Kaggle API credentials.
-
-1. Ensure credentials exist at `~/.kaggle/kaggle.json`.
-2. Download the dataset into the repository local data path.
+### 4.1 RNN train+eval
 
 ```bash
-conda run -n thesis python download_daisee.py
+./scripts/tmux_train_eval.sh rnn start \
+  --session rnn_te_p2 \
+  --manifest data/processed/runs/pipeline_2/feature_manifest.csv \
+  --run-id p2_tcn_01 \
+  --model tcn \
+  --device cuda \
+  --amp
 ```
 
-This script downloads the dataset and mirrors it into `data/raw/daisee/DAiSEE/` by default.
-
-### Notes
-
-- The raw dataset layout should include:
-  - `data/raw/daisee/DAiSEE/DataSet/Train`
-  - `data/raw/daisee/DAiSEE/DataSet/Validation`
-  - `data/raw/daisee/DAiSEE/DataSet/Test`
-  - `data/raw/daisee/DAiSEE/Labels/AllLabels.csv`
-  - `data/raw/daisee/DAiSEE/GenderClips/`
-  - `data/raw/daisee/DAiSEE/README.txt`
-
-## Preprocess Labels
-
-Filter the DAiSEE labels for engagement only and convert the engagement label to binary.
+### 4.2 ML train+eval
 
 ```bash
-conda run -n thesis python preprocess_labels.py
+./scripts/tmux_train_eval.sh ml start \
+  --session ml_te_p2 \
+  --manifest data/processed/runs/pipeline_2/feature_manifest.csv \
+  --run-id p2_ml_01 \
+  --backend lightgbm \
+  --feature-mode tsfresh \
+  --cpu-workers 2
 ```
 
-The output is saved to `data/processed/engagement_only_labels.csv`.
-
-## Feature Extraction
-
-Extract per-frame MediaPipe features and save them as sequence `.npy` files.
-Logging is always enabled at all levels by default (`DEBUG`, `INFO`, `WARNING`, `ERROR`).
-
-### Sample mode
-
-Use `--sample` for a fast end-to-end smoke test with only 10 random videos.
+### 4.3 CNN train+eval
 
 ```bash
-conda run -n thesis python extract_features.py --sample
+./scripts/tmux_train_eval.sh cnn start \
+  --session cnn_te_01 \
+  --manifest data/processed/cnn_frame_manifest.csv \
+  --run-id cnn_01 \
+  --model mobilenet_v3_small
 ```
 
-### Full extraction
+## 5) File JSON được lưu để so sánh
+
+Mỗi lần `train+eval` sẽ lưu trong thư mục run:
+- `checkpoints/runs/<module>_train_eval_<run_id>/train_eval_summary.json`
+- đồng thời append vào history:
+  - `checkpoints/reports/rnn_train_eval_history.jsonl`
+  - `checkpoints/reports/ml_train_eval_history.jsonl`
+  - `checkpoints/reports/cnn_train_eval_history.jsonl`
+
+## 6) Script tổng chạy qua đêm (1 tmux)
+
+Script:
+- `scripts/tmux_train_all.sh`
+
+Mặc định chạy tuần tự:
+- RNN: `gru gru_basic tcn tiny_transformer`
+- ML: bật
+- CNN: tắt mặc định (bật bằng `--with-cnn`)
+
+Ví dụ chạy qua đêm:
 
 ```bash
-conda run -n thesis python extract_features.py
+./scripts/tmux_train_all.sh start \
+  --session nightly_all \
+  --run-id-prefix nightly_p2 \
+  --rnn-manifest data/processed/runs/pipeline_2/feature_manifest.csv \
+  --ml-manifest data/processed/runs/pipeline_2/feature_manifest.csv \
+  --device cuda
 ```
 
-### Control extract progress log frequency
+Nếu muốn kèm CNN:
 
 ```bash
-conda run -n thesis python extract_features.py --log-every 1
+./scripts/tmux_train_all.sh start \
+  --session nightly_all_cnn \
+  --run-id-prefix nightly_full \
+  --with-cnn \
+  --cnn-manifest data/processed/cnn_frame_manifest.csv
 ```
 
-Default save locations:
+Kết quả tổng hợp:
+- `checkpoints/runs/train_all_<prefix>_<timestamp>/train_all_summary.json`
+- history:
+  - `checkpoints/reports/train_all_history.jsonl`
 
-- features: `data/processed/features/`
-- manifest: `data/processed/feature_manifest.csv`
+## 7) Quản lý tmux
 
-## Training
-
-Train the lightweight GRU model with validation and checkpointing.
-The training split is now fixed by official DAiSEE labels:
-
-- train: `TrainLabels.csv`
-- validation: `ValidationLabels.csv`
-- test: `TestLabels.csv`
-
-No random train/validation split is used anymore.
-
-### Sample training
+Ví dụ với script tổng:
 
 ```bash
-conda run -n thesis python train.py --sample
+./scripts/tmux_train_all.sh status --session nightly_all
+./scripts/tmux_train_all.sh logs --session nightly_all
+./scripts/tmux_train_all.sh attach --session nightly_all
+./scripts/tmux_train_all.sh stop --session nightly_all
 ```
 
-### Full training
+Tương tự cho `tmux_train_eval.sh rnn|ml|cnn`.
+
+## 8) Smoke test script trước khi chạy thật
 
 ```bash
-conda run -n thesis python train.py
+./scripts/tmux_train_eval.sh rnn start --example --session ex_rnn_te
+./scripts/tmux_train_all.sh start --example --session ex_all
 ```
 
-### Control training progress log frequency
+## 9) Tải lại raw dataset khi cần re-extract
 
 ```bash
-conda run -n thesis python train.py --log-every 1
+./scripts/data/download_daisee.sh
 ```
 
-This command trains on official train split, monitors official validation split for early stopping,
-and reports final metrics on official test split.
-
-Default checkpoint path:
-
-- `checkpoints/engagement_gru.pt`
-
-## File Summary
-
-- `config.py` — hyperparameters and folder paths
-- `preprocess_labels.py` — filter Engagement labels and save cleaned CSV
-- `extract_features.py` — MediaPipe feature extraction into `.npy` sequences
-- `dataset.py` — PyTorch `Dataset` for feature sequence loading
-- `model.py` — lightweight GRU classification model
-- `train.py` — CPU training loop with sample mode, early stopping, and checkpointing
-- `download_daisee.py` — Kaggle dataset download script
-
-## Recommended Workflow
-
-1. `conda run -n thesis python download_daisee.py`
-2. `conda run -n thesis python preprocess_labels.py`
-3. `conda run -n thesis python extract_features.py --sample`
-4. `conda run -n thesis python train.py --sample`
-
-After confirming the pipeline works, rerun extraction and training without `--sample` for full dataset processing.
-
-## Run with tmux (Detached by Default)
-
-There are now 3 tmux scripts:
-
-- `scripts/tmux_pipeline.sh` - run full pipeline (preprocess -> extract -> train)
-- `scripts/tmux_extract.sh` - run extract only
-- `scripts/tmux_train.sh` - run train only
-
-All scripts support the same tmux controls:
-
-```bash
-# start (default command)
-./scripts/<script_name>.sh
-
-# or explicit start
-./scripts/<script_name>.sh start
-
-# status / attach / logs / stop
-./scripts/<script_name>.sh status
-./scripts/<script_name>.sh attach
-./scripts/<script_name>.sh logs
-./scripts/<script_name>.sh stop
-```
-
-Detach from tmux without stopping run: press `Ctrl+b`, then `d`.
-
-### 1) Full pipeline in tmux
-
-```bash
-./scripts/tmux_pipeline.sh start
-```
-
-Sample smoke test:
-
-```bash
-./scripts/tmux_pipeline.sh start --sample
-```
-
-Useful options:
-
-- `--env NAME` (default: `thesis`)
-- `--session NAME` (default: `engagement_pipeline`)
-- `--extract-log-every N`
-- `--train-log-every N`
-- `--run-id ID` (important for output isolation)
-
-### 2) Extract-only in tmux
-
-```bash
-./scripts/tmux_extract.sh start
-```
-
-Sample extract:
-
-```bash
-./scripts/tmux_extract.sh start --sample
-```
-
-Useful options:
-
-- `--env NAME` (default: `thesis`)
-- `--session NAME` (default: `engagement_extract`)
-- `--log-every N`
-- `--run-id ID` (important for output isolation)
-
-### 3) Train-only in tmux
-
-```bash
-./scripts/tmux_train.sh start
-```
-
-Sample train:
-
-```bash
-./scripts/tmux_train.sh start --sample
-```
-
-Useful options:
-
-- `--env NAME` (default: `thesis`)
-- `--session NAME` (default: `engagement_train`)
-- `--log-every N`
-- `--run-id ID` (important for checkpoint isolation)
-
-### Run parallel tmux jobs without overwriting outputs
-
-When you run extract and pipeline at the same time, always use different `--run-id` values (and usually different `--session` values).
-
-Example:
-
-```bash
-./scripts/tmux_extract.sh start --session ex_a --run-id ex_a
-./scripts/tmux_pipeline.sh start --session pipe_b --run-id pipe_b
-```
-
-Output isolation paths:
-
-- Extract script writes to:
-  - `data/processed/runs/extract_<run_id>/features/`
-  - `data/processed/runs/extract_<run_id>/feature_manifest.csv`
-- Pipeline script writes to:
-  - `data/processed/runs/pipeline_<run_id>/features/`
-  - `data/processed/runs/pipeline_<run_id>/feature_manifest.csv`
-  - `checkpoints/runs/pipeline_<run_id>/engagement_gru.pt`
-- Train-only script writes to:
-  - `checkpoints/runs/train_<run_id>/engagement_gru.pt`
-
-Log files are stored in `logs/` (`latest.log`, `latest_extract.log`, `latest_train.log` symlinks are updated per script).
-
-`--log-level` options are removed. Logging is always enabled at all levels by default.
-
-## Troubleshooting
-
-- If download fails, ensure `~/.kaggle/kaggle.json` exists and contains valid Kaggle credentials.
-- If MediaPipe faces are not detected, verify video file readability and codec support via OpenCV.
-- This pipeline is explicitly designed for CPU usage and uses `num_workers=0` for data loading stability.
-- If `tmux` is missing, install it first (for Ubuntu/Debian: `sudo apt-get install tmux`).
-# engagement-cpu
+Dataset raw sẽ vào đúng vị trí:
+- `data/raw/daisee/DAiSEE/`

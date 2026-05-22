@@ -1,0 +1,35 @@
+{
+  "manifest": "data/processed/runs/pipeline_2/feature_manifest.csv",
+  "checkpoint": "checkpoints/runs/train_smoke_tcn/engagement_gru.pt",
+  "split": "test",
+  "rows": 17986,
+  "batch_size": 128,
+  "threshold": 0.3699999999999999,
+  "loss": 0.7738044149854697,
+  "metrics": {
+    "accuracy": 0.691371066384966,
+    "precision_pos": 0.695095230069105,
+    "recall_pos": 0.9900768245838668,
+    "f1_pos": 0.816768443637564,
+    "precision_neg": 0.33689839572192515,
+    "recall_neg": 0.011475409836065573,
+    "f1_neg": 0.022194821208384705,
+    "balanced_accuracy": 0.5007761172099662,
+    "f1_macro": 0.4194816324229743,
+    "tp": 12372.0,
+    "tn": 63.0,
+    "fp": 5427.0,
+    "fn": 124.0
+  },
+  "model_kwargs": {
+    "model_name": "tcn",
+    "input_size": 90,
+    "hidden_size": 128,
+    "num_layers": 2,
+    "dropout": 0.3,
+    "num_heads": 4,
+    "kernel_size": 3,
+    "tcn_blocks": 3,
+    "max_seq_len": 30
+  }
+}
