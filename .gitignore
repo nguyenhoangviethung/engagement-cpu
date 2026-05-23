@@ -1,7 +1,12 @@
 logs/
-data/
+data/raw/
 # checkpoints/
 __pycache__/
 *.log
 .vscode/
 AGENTS.md
+
+# Local environment
+.venv/
+
+*.jpg

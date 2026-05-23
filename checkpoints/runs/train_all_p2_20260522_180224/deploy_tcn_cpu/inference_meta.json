@@ -1,0 +1,22 @@
+{
+  "source_checkpoint": "checkpoints/runs/train_all_p2_20260522_180224/rnn_tcn/engagement_tcn.pt",
+  "fp32_artifact": "checkpoints/runs/train_all_p2_20260522_180224/deploy_tcn_cpu/engagement_fp32.ts",
+  "int8_artifact": "checkpoints/runs/train_all_p2_20260522_180224/deploy_tcn_cpu/engagement_int8_dynamic.ts",
+  "threshold": 0.2599999999999999,
+  "model_kwargs": {
+    "model_name": "tcn",
+    "input_size": 90,
+    "hidden_size": 128,
+    "num_layers": 2,
+    "dropout": 0.3,
+    "num_heads": 4,
+    "kernel_size": 3,
+    "tcn_blocks": 3,
+    "max_seq_len": 30
+  },
+  "normalize_features": true,
+  "cpu_threads": 2,
+  "benchmark_iters": 200,
+  "fp32_latency_ms": 2.9305300249961874,
+  "int8_latency_ms": 2.6265520500010098
+}

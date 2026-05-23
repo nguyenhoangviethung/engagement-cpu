@@ -1,0 +1,35 @@
+{
+  "manifest": "/home/bear/engagement-cpu/scripts/../checkpoints/runs/train_all_p2_full_20260522_185411/rnn_manifest.local.csv",
+  "checkpoint": "/home/bear/engagement-cpu/scripts/../checkpoints/runs/train_all_p2_full_20260522_185411/rnn_gru/engagement_gru.pt",
+  "split": "test",
+  "rows": 17986,
+  "batch_size": 128,
+  "threshold": 0.3199999999999999,
+  "loss": 1.1154591466274195,
+  "metrics": {
+    "accuracy": 0.48654509062604245,
+    "precision_pos": 0.7425256581883088,
+    "recall_pos": 0.3994878361075544,
+    "f1_pos": 0.5194859253863364,
+    "precision_neg": 0.33374766935985084,
+    "recall_neg": 0.6846994535519125,
+    "f1_neg": 0.4487554467856503,
+    "balanced_accuracy": 0.5420936448297334,
+    "f1_macro": 0.48412068608599335,
+    "tp": 4992.0,
+    "tn": 3759.0,
+    "fp": 1731.0,
+    "fn": 7504.0
+  },
+  "model_kwargs": {
+    "model_name": "gru",
+    "input_size": 90,
+    "hidden_size": 192,
+    "num_layers": 3,
+    "dropout": 0.25,
+    "num_heads": 4,
+    "kernel_size": 5,
+    "tcn_blocks": 4,
+    "max_seq_len": 30
+  }
+}

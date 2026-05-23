@@ -1,0 +1,25 @@
+{
+  "manifest": "/home/bear/engagement-cpu/scripts/../checkpoints/runs/train_all_p2_20260522_180224/ml_manifest.local.csv",
+  "model": "/home/bear/engagement-cpu/scripts/../checkpoints/runs/trainml_p2_ml/engagement_xgb.json",
+  "summary_json": "/home/bear/engagement-cpu/scripts/../checkpoints/runs/train_all_p2_20260522_180224/ml/engagement_xgb.summary.json",
+  "backend": "xgboost",
+  "split": "test",
+  "rows": 17986,
+  "feature_mode": "tsfresh",
+  "threshold": 0.5,
+  "metrics": {
+    "accuracy": 0.5816190370288001,
+    "precision_neg": 0.377335744424352,
+    "recall_neg": 0.5701275045537341,
+    "f1_neg": 0.45411679361624957,
+    "precision_pos": 0.7564750799711072,
+    "recall_pos": 0.586667733674776,
+    "f1_pos": 0.6608374273223059,
+    "balanced_accuracy": 0.578397619114255,
+    "f2_pos": 0.6142438206954336,
+    "tp": 7331.0,
+    "tn": 3130.0,
+    "fp": 2360.0,
+    "fn": 5165.0
+  }
+}

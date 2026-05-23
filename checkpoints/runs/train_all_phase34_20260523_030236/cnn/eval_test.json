@@ -1,0 +1,38 @@
+{
+  "manifest": "/home/bear/engagement-cpu/scripts/../data/processed/runs/train_all_phase34_20260523_030236/cnn_frame_manifest.csv",
+  "checkpoint": "/home/bear/engagement-cpu/scripts/../checkpoints/runs/train_all_phase34_20260523_030236/cnn/engagement_cnn.pt",
+  "split": "test",
+  "rows": 14241,
+  "videos": 1784,
+  "batch_size": 256,
+  "model_name": "efficientnet_b0",
+  "image_size": 224,
+  "device": "cuda",
+  "threshold": 0.18999999999999995,
+  "aggregation": "video",
+  "loss": 0.7773188721069701,
+  "metrics": {
+    "accuracy": 0.7090807174887892,
+    "balanced_accuracy": 0.5308677590583891,
+    "precision_pos": 0.7074437391806117,
+    "recall_pos": 0.9903069466882067,
+    "recall_neg": 0.07142857142857142,
+    "f1_macro": 0.4779823046569096
+  },
+  "row_metrics": {
+    "accuracy": 0.7103433747630082,
+    "balanced_accuracy": 0.5390730243094121,
+    "precision_pos": 0.7110475352112676,
+    "recall_pos": 0.9811721834193744,
+    "recall_neg": 0.0969738651994498,
+    "f1_macro": 0.4973686478166449
+  },
+  "video_metrics": {
+    "accuracy": 0.7090807174887892,
+    "balanced_accuracy": 0.5308677590583891,
+    "precision_pos": 0.7074437391806117,
+    "recall_pos": 0.9903069466882067,
+    "recall_neg": 0.07142857142857142,
+    "f1_macro": 0.4779823046569096
+  }
+}
