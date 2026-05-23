@@ -5,7 +5,13 @@ from pathlib import Path
 import numpy as np
 
 from engagement_daisee.common.config import FEATURE_MANIFEST_CSV
-from engagement_daisee.ml.train import _build_feature_matrix, _compute_metrics, _load_manifest
+from engagement_daisee.ml.train import (
+    _apply_feature_preprocessor,
+    _build_feature_matrix,
+    _compute_metrics,
+    _load_feature_preprocessor,
+    _load_manifest,
+)
 
 try:
     import xgboost as xgb
@@ -61,11 +67,41 @@ def _resolve_threshold(threshold: float | None, summary_json: Path | None) -> fl
     return 0.5
 
 
+def _resolve_preprocessor(summary_json: Path | None) -> dict | None:
+    if summary_json is None or not summary_json.exists():
+        return None
+    payload = json.loads(summary_json.read_text())
+    path_raw = payload.get("preprocessor_path")
+    if not path_raw:
+        return None
+    preprocessor_path = Path(path_raw)
+    if not preprocessor_path.exists():
+        return None
+    return _load_feature_preprocessor(preprocessor_path)
+
+
 def _split_indices(split_series: np.ndarray, split_name: str) -> np.ndarray:
     indices = np.where(split_series == split_name)[0]
     if indices.size == 0:
         raise ValueError(f"Split '{split_name}' is empty in manifest.")
     return indices
+
+
+def _aggregate_by_video(manifest_subset, labels: np.ndarray, probabilities: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    if "video_id" not in manifest_subset.columns:
+        return labels, probabilities
+
+    import pandas as pd
+
+    frame = pd.DataFrame(
+        {
+            "video_id": manifest_subset["video_id"].astype(str).to_numpy(),
+            "label": labels.astype(np.int64),
+            "probability": probabilities.astype(np.float32),
+        }
+    )
+    grouped = frame.groupby("video_id", sort=False).agg({"label": "max", "probability": "mean"})
+    return grouped["label"].to_numpy(dtype=np.int64), grouped["probability"].to_numpy(dtype=np.float32)
 
 
 def run_eval(
@@ -76,6 +112,7 @@ def run_eval(
     summary_json: Path | None,
     feature_mode: str,
     output_json: Path | None,
+    aggregation: str,
 ) -> dict:
     manifest = _load_manifest(manifest_path)
 
@@ -85,12 +122,18 @@ def run_eval(
 
     eval_manifest = manifest.iloc[split_indices].reset_index(drop=True)
     x_eval, y_eval = _build_feature_matrix(eval_manifest, feature_mode=feature_mode)
+    preprocessor = _resolve_preprocessor(summary_json)
+    if preprocessor is not None:
+        x_eval = _apply_feature_preprocessor(x_eval, preprocessor)
 
     backend, model = _load_model(model_path)
     probabilities = _predict_probabilities(backend, model, x_eval)
 
     resolved_threshold = _resolve_threshold(threshold=threshold, summary_json=summary_json)
-    metrics = _compute_metrics(y_eval, probabilities, resolved_threshold)
+    row_metrics = _compute_metrics(y_eval, probabilities, resolved_threshold)
+    video_labels, video_probabilities = _aggregate_by_video(eval_manifest, y_eval, probabilities)
+    video_metrics = _compute_metrics(video_labels, video_probabilities, resolved_threshold)
+    selected_metrics = video_metrics if aggregation == "video" else row_metrics
 
     report = {
         "manifest": str(manifest_path),
@@ -99,9 +142,13 @@ def run_eval(
         "backend": backend,
         "split": split_name,
         "rows": int(len(eval_manifest)),
+        "videos": int(len(video_labels)),
         "feature_mode": feature_mode,
         "threshold": resolved_threshold,
-        "metrics": metrics,
+        "aggregation": aggregation,
+        "metrics": selected_metrics,
+        "row_metrics": row_metrics,
+        "video_metrics": video_metrics,
     }
 
     if output_json is not None:
@@ -125,6 +172,7 @@ def parse_args() -> argparse.Namespace:
         help="Optional training summary json containing selected_threshold",
     )
     parser.add_argument("--output-json", type=Path, default=None)
+    parser.add_argument("--aggregation", type=str, default="rows", choices=["rows", "video"])
     return parser.parse_args()
 
 
@@ -138,6 +186,7 @@ def main() -> None:
         summary_json=args.summary_json,
         feature_mode=args.feature_mode,
         output_json=args.output_json,
+        aggregation=args.aggregation,
     )
     print(json.dumps(report, indent=2))
 

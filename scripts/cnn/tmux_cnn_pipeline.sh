@@ -11,7 +11,7 @@ RUNS_CHECKPOINT_DIR="$WORKDIR/checkpoints/runs"
 COMMAND="start"
 RUN_ID=""
 SAMPLE_MODE=0
-FRAME_SIZE=112
+FRAME_SIZE=224
 FRAMES_PER_VIDEO=8
 MODEL_NAME="mobilenet_v3_small"
 BATCH_SIZE=64
@@ -19,7 +19,7 @@ EPOCHS=20
 LEARNING_RATE=3e-4
 WEIGHT_DECAY=1e-4
 PATIENCE=6
-USE_PRETRAINED=0
+USE_PRETRAINED=1
 FREEZE_BACKBONE=0
 TRAIN_SAMPLER="weighted"
 DEVICE="cuda"
@@ -40,7 +40,7 @@ Options:
   --run-id ID              Custom run id (default: timestamp)
   --session NAME           tmux session name
   --env NAME               conda env (default: thesis)
-  --frame-size N           Frame size for extraction (default: 112)
+  --frame-size N           Frame size for extraction (default: 224)
   --frames-per-video N     Uniform frames per video (default: 8)
   --model NAME             mobilenet_v3_small | efficientnet_b0 | tinycnn
   --batch-size N           Train batch size (default: 64)
@@ -49,6 +49,7 @@ Options:
   --weight-decay V         Weight decay (default: 1e-4)
   --patience N             Early stopping patience (default: 6)
   --pretrained             Use ImageNet weights if available
+  --no-pretrained          Disable ImageNet weights
   --freeze-backbone        Freeze backbone and train head only
   --train-sampler NAME     weighted | shuffle
   --device NAME             cpu | cuda
@@ -112,6 +113,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --pretrained)
       USE_PRETRAINED=1
+      shift
+      ;;
+    --no-pretrained)
+      USE_PRETRAINED=0
       shift
       ;;
     --freeze-backbone)

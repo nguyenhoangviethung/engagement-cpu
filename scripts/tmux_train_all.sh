@@ -35,11 +35,24 @@ RNN_TCN_KERNEL_SIZE=5
 RNN_THRESHOLD_OBJECTIVE="balanced_accuracy"
 RNN_LOSS="bce_weighted"
 ML_CPU_WORKERS=2
+ML_THRESHOLD_OBJECTIVE="accuracy"
+ML_DIM_REDUCTION="none"
+ML_DIM_COMPONENTS=128
+ML_OVERSAMPLE="none"
 CNN_MODEL="mobilenet_v3_small"
 CNN_BATCH_SIZE=64
 CNN_EPOCHS=20
-CNN_IMAGE_SIZE=112
+CNN_IMAGE_SIZE=224
 CNN_FRAMES_PER_VIDEO=8
+CNN_PRETRAINED=1
+CNN_FREEZE_BACKBONE=0
+CNN_FORCE_EXTRACT=0
+CNN_LEARNING_RATE=3e-4
+CNN_WEIGHT_DECAY=1e-4
+CNN_PATIENCE=6
+CNN_TRAIN_SAMPLER="weighted"
+CNN_THRESHOLD_OBJECTIVE="accuracy"
+EVAL_AGGREGATION="video"
 
 EXAMPLE_MODE=0
 
@@ -73,11 +86,24 @@ Options:
   --rnn-threshold-objective NAME
   --rnn-loss NAME
   --ml-cpu-workers N
+  --ml-threshold-objective NAME
+  --ml-dim-reduction none|pca|svd
+  --ml-dim-components N
+  --ml-oversample none|random
   --cnn-model NAME
   --cnn-batch-size N
   --cnn-epochs N
   --cnn-image-size N
   --cnn-frames-per-video N
+  --cnn-pretrained / --no-cnn-pretrained
+  --cnn-freeze-backbone
+  --cnn-force-extract
+  --cnn-lr V
+  --cnn-weight-decay V
+  --cnn-patience N
+  --cnn-train-sampler NAME
+  --cnn-threshold-objective NAME
+  --eval-aggregation rows|video
   --session NAME
   --env NAME
   --example            Help-only smoke run in tmux
@@ -110,11 +136,25 @@ while [[ $# -gt 0 ]]; do
     --rnn-threshold-objective) RNN_THRESHOLD_OBJECTIVE="$2"; shift 2 ;;
     --rnn-loss) RNN_LOSS="$2"; shift 2 ;;
     --ml-cpu-workers) ML_CPU_WORKERS="$2"; shift 2 ;;
+    --ml-threshold-objective) ML_THRESHOLD_OBJECTIVE="$2"; shift 2 ;;
+    --ml-dim-reduction) ML_DIM_REDUCTION="$2"; shift 2 ;;
+    --ml-dim-components) ML_DIM_COMPONENTS="$2"; shift 2 ;;
+    --ml-oversample) ML_OVERSAMPLE="$2"; shift 2 ;;
     --cnn-model) CNN_MODEL="$2"; shift 2 ;;
     --cnn-batch-size) CNN_BATCH_SIZE="$2"; shift 2 ;;
     --cnn-epochs) CNN_EPOCHS="$2"; shift 2 ;;
     --cnn-image-size) CNN_IMAGE_SIZE="$2"; shift 2 ;;
     --cnn-frames-per-video) CNN_FRAMES_PER_VIDEO="$2"; shift 2 ;;
+    --cnn-pretrained) CNN_PRETRAINED=1; shift ;;
+    --no-cnn-pretrained) CNN_PRETRAINED=0; shift ;;
+    --cnn-freeze-backbone) CNN_FREEZE_BACKBONE=1; shift ;;
+    --cnn-force-extract) CNN_FORCE_EXTRACT=1; shift ;;
+    --cnn-lr) CNN_LEARNING_RATE="$2"; shift 2 ;;
+    --cnn-weight-decay) CNN_WEIGHT_DECAY="$2"; shift 2 ;;
+    --cnn-patience) CNN_PATIENCE="$2"; shift 2 ;;
+    --cnn-train-sampler) CNN_TRAIN_SAMPLER="$2"; shift 2 ;;
+    --cnn-threshold-objective) CNN_THRESHOLD_OBJECTIVE="$2"; shift 2 ;;
+    --eval-aggregation) EVAL_AGGREGATION="$2"; shift 2 ;;
     --session) SESSION_NAME="$2"; shift 2 ;;
     --env) CONDA_ENV="$2"; shift 2 ;;
     --example) EXAMPLE_MODE=1; shift ;;
@@ -146,13 +186,17 @@ WORKDIR='$WORKDIR' CONDA_ENV='$CONDA_ENV' RUN_ID_PREFIX='$RUN_ID_PREFIX' \
 RNN_MANIFEST='$RNN_MANIFEST' ML_MANIFEST='$ML_MANIFEST' CNN_MANIFEST='$CNN_MANIFEST' \
 RNN_MODELS='$RNN_MODELS' INCLUDE_ML='$INCLUDE_ML' INCLUDE_CNN='$INCLUDE_CNN' \
 SAMPLE_MODE='$SAMPLE_MODE' DEVICE='$DEVICE' USE_AMP='$USE_AMP' \
-RNN_CPU_THREADS='$RNN_CPU_THREADS' ML_CPU_WORKERS='$ML_CPU_WORKERS' \
+RNN_CPU_THREADS='$RNN_CPU_THREADS' ML_CPU_WORKERS='$ML_CPU_WORKERS' ML_THRESHOLD_OBJECTIVE='$ML_THRESHOLD_OBJECTIVE' \
+ML_DIM_REDUCTION='$ML_DIM_REDUCTION' ML_DIM_COMPONENTS='$ML_DIM_COMPONENTS' ML_OVERSAMPLE='$ML_OVERSAMPLE' \
 RNN_HIDDEN_SIZE='$RNN_HIDDEN_SIZE' RNN_NUM_LAYERS='$RNN_NUM_LAYERS' RNN_DROPOUT='$RNN_DROPOUT' \
 RNN_BATCH_SIZE='$RNN_BATCH_SIZE' RNN_EPOCHS='$RNN_EPOCHS' RNN_PATIENCE='$RNN_PATIENCE' \
 RNN_MIN_EPOCHS='$RNN_MIN_EPOCHS' RNN_TCN_BLOCKS='$RNN_TCN_BLOCKS' RNN_TCN_KERNEL_SIZE='$RNN_TCN_KERNEL_SIZE' \
 RNN_THRESHOLD_OBJECTIVE='$RNN_THRESHOLD_OBJECTIVE' RNN_LOSS='$RNN_LOSS' \
 CNN_MODEL='$CNN_MODEL' CNN_BATCH_SIZE='$CNN_BATCH_SIZE' CNN_EPOCHS='$CNN_EPOCHS' CNN_IMAGE_SIZE='$CNN_IMAGE_SIZE' \
-CNN_FRAMES_PER_VIDEO='$CNN_FRAMES_PER_VIDEO' \
+CNN_FRAMES_PER_VIDEO='$CNN_FRAMES_PER_VIDEO' CNN_PRETRAINED='$CNN_PRETRAINED' CNN_FREEZE_BACKBONE='$CNN_FREEZE_BACKBONE' \
+CNN_FORCE_EXTRACT='$CNN_FORCE_EXTRACT' CNN_LEARNING_RATE='$CNN_LEARNING_RATE' CNN_WEIGHT_DECAY='$CNN_WEIGHT_DECAY' \
+CNN_PATIENCE='$CNN_PATIENCE' CNN_TRAIN_SAMPLER='$CNN_TRAIN_SAMPLER' CNN_THRESHOLD_OBJECTIVE='$CNN_THRESHOLD_OBJECTIVE' \
+EVAL_AGGREGATION='$EVAL_AGGREGATION' \
 RUN_ROOT='$run_root' RUN_LOG='$run_log' SUMMARY_JSON='$summary_json' HISTORY_JSONL='$history_jsonl' \
 LATEST_LOG_LINK='$LATEST_LOG_LINK' RUNS_CHECKPOINT_DIR='$RUNS_CHECKPOINT_DIR' \
 RUN_PROCESSED_ROOT='$processed_run_root' \

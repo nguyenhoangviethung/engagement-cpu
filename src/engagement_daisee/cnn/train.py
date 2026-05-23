@@ -99,19 +99,29 @@ def _compute_metrics(labels: np.ndarray, probs: np.ndarray, threshold: float) ->
     }
 
 
-def _find_best_threshold(labels: np.ndarray, probs: np.ndarray) -> tuple[float, dict[str, float]]:
+def _is_better_for_objective(candidate: dict[str, float], incumbent: dict[str, float], objective: str) -> bool:
+    candidate_score = float(candidate[objective])
+    incumbent_score = float(incumbent[objective])
+    if candidate_score > incumbent_score + 1e-8:
+        return True
+    if abs(candidate_score - incumbent_score) <= 1e-8:
+        return candidate["f1_macro"] > incumbent["f1_macro"] + 1e-8
+    return False
+
+
+def _find_best_threshold(
+    labels: np.ndarray,
+    probs: np.ndarray,
+    objective: str = "balanced_accuracy",
+) -> tuple[float, dict[str, float]]:
     thresholds = np.arange(0.1, 0.901, 0.01)
     best_t = 0.5
     best_m = _compute_metrics(labels, probs, threshold=0.5)
     for t in thresholds:
         m = _compute_metrics(labels, probs, threshold=float(t))
-        if m["balanced_accuracy"] > best_m["balanced_accuracy"] + 1e-8:
+        if _is_better_for_objective(m, best_m, objective):
             best_t = float(t)
             best_m = m
-        elif abs(m["balanced_accuracy"] - best_m["balanced_accuracy"]) <= 1e-8:
-            if m["recall_pos"] > best_m["recall_pos"] + 1e-8:
-                best_t = float(t)
-                best_m = m
     return best_t, best_m
 
 
@@ -285,6 +295,7 @@ def train_cnn(
     freeze_backbone: bool = False,
     sampler_strategy: str = "weighted",
     device: str = DEFAULT_DEVICE,
+    threshold_objective: str = "balanced_accuracy",
 ) -> Path:
     _set_seed(seed)
     torch.set_num_threads(max(1, os.cpu_count() or 1))
@@ -361,8 +372,12 @@ def train_cnn(
         train_metrics = _compute_metrics(train_labels_np, train_probs_np, threshold=0.5)
 
         val_loss, val_labels_np, val_probs_np = _run_epoch(model, val_loader, criterion, device, optimizer=None)
-        val_threshold, val_metrics = _find_best_threshold(val_labels_np, val_probs_np)
-        val_score = val_metrics["balanced_accuracy"]
+        val_threshold, val_metrics = _find_best_threshold(
+            val_labels_np,
+            val_probs_np,
+            objective=threshold_objective,
+        )
+        val_score = val_metrics[threshold_objective]
         scheduler.step(val_loss)
 
         history.append(
@@ -404,7 +419,9 @@ def train_cnn(
                     "model_name": model_name,
                     "image_size": image_size,
                     "best_threshold": best_threshold,
-                    "best_val_balanced_accuracy": best_val_score,
+                    "best_val_metric": best_val_score,
+                    "best_val_balanced_accuracy": val_metrics["balanced_accuracy"],
+                    "threshold_objective": threshold_objective,
                     "history": history,
                 },
                 output_path,
@@ -440,7 +457,9 @@ def train_cnn(
                 "image_size": image_size,
                 "device": device,
                 "best_threshold": best_threshold,
-                "best_val_balanced_accuracy": best_val_score,
+                "best_val_metric": best_val_score,
+                "best_val_balanced_accuracy": float(ckpt.get("best_val_balanced_accuracy", best_val_score)),
+                "threshold_objective": threshold_objective,
                 "test_loss": test_loss,
                 "test_accuracy": test_metrics["accuracy"],
                 "test_balanced_accuracy": test_metrics["balanced_accuracy"],
@@ -474,6 +493,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--freeze-backbone", action="store_true", help="Freeze CNN backbone and train classifier head only")
     parser.add_argument("--train-sampler", type=str, default="weighted", choices=["weighted", "shuffle"])
     parser.add_argument("--device", type=str, default=DEFAULT_DEVICE, choices=["cpu", "cuda"])
+    parser.add_argument(
+        "--threshold-objective",
+        type=str,
+        default="balanced_accuracy",
+        choices=["accuracy", "balanced_accuracy", "f1_macro"],
+        help="Validation metric used for checkpoint/threshold selection.",
+    )
     return parser.parse_args()
 
 
@@ -497,6 +523,7 @@ def main() -> None:
         freeze_backbone=args.freeze_backbone,
         sampler_strategy=args.train_sampler,
         device=args.device,
+        threshold_objective=args.threshold_objective,
     )
 
 

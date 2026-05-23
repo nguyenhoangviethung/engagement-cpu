@@ -1,0 +1,43 @@
+{
+  "model_type": "xgboost",
+  "manifest": "data/processed/runs/pipeline_2/feature_manifest.local.csv",
+  "rows_used": 86039,
+  "sample": false,
+  "sample_videos": 10,
+  "selected_threshold": 0.49000000000000005,
+  "checkpoint_metric": "validation_accuracy",
+  "threshold_objective": "accuracy",
+  "validation_metrics": {
+    "accuracy": 0.6130860741777466,
+    "precision_neg": 0.6060120734261427,
+    "recall_neg": 0.6784827586206896,
+    "f1_neg": 0.6402030324721807,
+    "precision_pos": 0.6223878179167341,
+    "recall_pos": 0.5457386363636364,
+    "f1_pos": 0.5815484749867554,
+    "balanced_accuracy": 0.6121106974921631,
+    "f2_pos": 0.5595199953397606,
+    "tp": 3842.0,
+    "tn": 4919.0,
+    "fp": 2331.0,
+    "fn": 3198.0
+  },
+  "test_metrics": {
+    "accuracy": 0.595741131991549,
+    "precision_neg": 0.3837011884550085,
+    "recall_neg": 0.5351548269581057,
+    "f1_neg": 0.44694607134707537,
+    "precision_pos": 0.7529286474973376,
+    "recall_pos": 0.6223591549295775,
+    "f1_pos": 0.6814457831325301,
+    "balanced_accuracy": 0.5787569909438416,
+    "f2_pos": 0.6447200437716578,
+    "tp": 7777.0,
+    "tn": 2938.0,
+    "fp": 2552.0,
+    "fn": 4719.0
+  },
+  "best_iteration": 378,
+  "feature_mode": "tsfresh",
+  "cpu_workers": 2
+}

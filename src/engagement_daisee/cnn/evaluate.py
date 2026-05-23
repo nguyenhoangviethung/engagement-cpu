@@ -38,6 +38,17 @@ def _build_loader(dataset: DAiSEECNNFrameDataset, indices: list[int], batch_size
     return DataLoader(subset, batch_size=batch_size, shuffle=False, num_workers=0, pin_memory=False)
 
 
+def _aggregate_by_video(manifest_subset: pd.DataFrame, labels, probs):
+    if "video_id" not in manifest_subset.columns:
+        return labels, probs
+
+    frame = manifest_subset[["video_id"]].copy().reset_index(drop=True)
+    frame["label"] = labels.astype("int64")
+    frame["probability"] = probs.astype("float32")
+    grouped = frame.groupby("video_id", sort=False).agg({"label": "max", "probability": "mean"})
+    return grouped["label"].to_numpy(dtype="int64"), grouped["probability"].to_numpy(dtype="float32")
+
+
 def run_eval(
     manifest_path: Path,
     checkpoint_path: Path,
@@ -46,6 +57,7 @@ def run_eval(
     threshold: float | None,
     output_json: Path | None,
     device: str,
+    aggregation: str,
 ) -> dict:
     if device == "cuda" and not torch.cuda.is_available():
         device = "cpu"
@@ -76,20 +88,28 @@ def run_eval(
 
     criterion = nn.BCEWithLogitsLoss()
     loss, labels, probs = _run_epoch(model=model, loader=loader, criterion=criterion, device=device, optimizer=None)
-    metrics = _compute_metrics(labels=labels, probs=probs, threshold=resolved_threshold)
+    row_metrics = _compute_metrics(labels=labels, probs=probs, threshold=resolved_threshold)
+    manifest_subset = manifest_df.iloc[split_map[split_name]].reset_index(drop=True)
+    video_labels, video_probs = _aggregate_by_video(manifest_subset, labels, probs)
+    video_metrics = _compute_metrics(labels=video_labels, probs=video_probs, threshold=resolved_threshold)
+    selected_metrics = video_metrics if aggregation == "video" else row_metrics
 
     report = {
         "manifest": str(manifest_path),
         "checkpoint": str(checkpoint_path),
         "split": split_name,
         "rows": int(len(split_map[split_name])),
+        "videos": int(len(video_labels)),
         "batch_size": int(batch_size),
         "model_name": model_name,
         "image_size": image_size,
         "device": device,
         "threshold": resolved_threshold,
+        "aggregation": aggregation,
         "loss": float(loss),
-        "metrics": metrics,
+        "metrics": selected_metrics,
+        "row_metrics": row_metrics,
+        "video_metrics": video_metrics,
     }
 
     if output_json is not None:
@@ -108,6 +128,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--threshold", type=float, default=None, help="Override decision threshold")
     parser.add_argument("--output-json", type=Path, default=None, help="Optional report output path")
     parser.add_argument("--device", type=str, default="cpu", choices=["cpu", "cuda"])
+    parser.add_argument("--aggregation", type=str, default="rows", choices=["rows", "video"])
     return parser.parse_args()
 
 
@@ -121,6 +142,7 @@ def main() -> None:
         threshold=args.threshold,
         output_json=args.output_json,
         device=args.device,
+        aggregation=args.aggregation,
     )
     print(json.dumps(report, indent=2))
 

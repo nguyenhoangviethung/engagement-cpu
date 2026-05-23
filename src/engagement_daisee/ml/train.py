@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 from sklearn.metrics import confusion_matrix, precision_recall_fscore_support
 from sklearn.model_selection import train_test_split
+from sklearn.decomposition import PCA, TruncatedSVD
 from xgboost import XGBClassifier
 
 from engagement_daisee.common.config import CHECKPOINT_DIR, FEATURE_MANIFEST_CSV, RANDOM_SEED
@@ -106,7 +107,24 @@ def _compute_metrics(labels: np.ndarray, probabilities: np.ndarray, threshold: f
     }
 
 
-def _select_threshold(labels: np.ndarray, probabilities: np.ndarray, forced_threshold: float | None) -> tuple[float, dict[str, float]]:
+def _is_better_for_objective(candidate: dict[str, float], incumbent: dict[str, float], objective: str) -> bool:
+    if candidate[objective] > incumbent[objective] + 1e-8:
+        return True
+    if abs(candidate[objective] - incumbent[objective]) <= 1e-8:
+        if objective == "accuracy":
+            return candidate["balanced_accuracy"] > incumbent["balanced_accuracy"] + 1e-8
+        if objective == "balanced_accuracy":
+            return candidate["f1_pos"] > incumbent["f1_pos"] + 1e-8
+        return candidate["recall_pos"] > incumbent["recall_pos"] + 1e-8
+    return False
+
+
+def _select_threshold(
+    labels: np.ndarray,
+    probabilities: np.ndarray,
+    forced_threshold: float | None,
+    objective: str,
+) -> tuple[float, dict[str, float]]:
     if forced_threshold is not None:
         threshold = float(forced_threshold)
         return threshold, _compute_metrics(labels, probabilities, threshold)
@@ -117,18 +135,9 @@ def _select_threshold(labels: np.ndarray, probabilities: np.ndarray, forced_thre
 
     for threshold in candidates:
         metrics = _compute_metrics(labels, probabilities, float(threshold))
-        if metrics["f2_pos"] > best_metrics["f2_pos"] + 1e-8:
+        if _is_better_for_objective(metrics, best_metrics, objective):
             best_threshold = float(threshold)
             best_metrics = metrics
-            continue
-        if abs(metrics["f2_pos"] - best_metrics["f2_pos"]) <= 1e-8:
-            if metrics["recall_pos"] > best_metrics["recall_pos"] + 1e-8:
-                best_threshold = float(threshold)
-                best_metrics = metrics
-                continue
-            if abs(metrics["recall_pos"] - best_metrics["recall_pos"]) <= 1e-8 and metrics["precision_pos"] > best_metrics["precision_pos"] + 1e-8:
-                best_threshold = float(threshold)
-                best_metrics = metrics
 
     return best_threshold, best_metrics
 
@@ -164,6 +173,19 @@ def _sequence_to_tsfresh_like_features(sequence: np.ndarray) -> np.ndarray:
     slope = (centered_t[:, None] * centered).sum(axis=0) / slope_den
     energy = np.mean(sequence * sequence, axis=0)
     iqr = np.percentile(sequence, 75, axis=0) - np.percentile(sequence, 25, axis=0)
+    median = np.median(sequence, axis=0)
+    q10 = np.percentile(sequence, 10, axis=0)
+    q90 = np.percentile(sequence, 90, axis=0)
+    value_range = np.ptp(sequence, axis=0)
+    centered_std = sequence.std(axis=0) + 1e-6
+    skewness = np.mean((centered / centered_std) ** 3, axis=0)
+    kurtosis = np.mean((centered / centered_std) ** 4, axis=0) - 3.0
+    abs_sum_change = np.sum(np.abs(diff), axis=0) if diff.size else np.zeros(sequence.shape[1], dtype=np.float32)
+    mean_second_diff = (
+        np.mean(np.abs(np.diff(sequence, n=2, axis=0)), axis=0)
+        if sequence.shape[0] >= 3
+        else np.zeros(sequence.shape[1], dtype=np.float32)
+    )
 
     if sequence.shape[0] >= 3:
         middle = sequence[1:-1]
@@ -200,6 +222,14 @@ def _sequence_to_tsfresh_like_features(sequence: np.ndarray) -> np.ndarray:
             max_abs_diff.astype(np.float32),
             energy.astype(np.float32),
             iqr.astype(np.float32),
+            median.astype(np.float32),
+            q10.astype(np.float32),
+            q90.astype(np.float32),
+            value_range.astype(np.float32),
+            skewness.astype(np.float32),
+            kurtosis.astype(np.float32),
+            abs_sum_change.astype(np.float32),
+            mean_second_diff.astype(np.float32),
             peak_rate.astype(np.float32),
             zero_cross_rate.astype(np.float32),
             autocorr_lag1.astype(np.float32),
@@ -276,6 +306,100 @@ def _build_feature_matrix(manifest: pd.DataFrame, feature_mode: str) -> tuple[np
         raise RuntimeError("No feature rows could be loaded from the manifest.")
 
     return np.stack(features, axis=0), np.asarray(labels, dtype=np.int64)
+
+
+def _fit_feature_preprocessor(
+    x_train: np.ndarray,
+    dim_reduction: str,
+    dim_components: int,
+) -> tuple[dict, np.ndarray]:
+    x_train = np.asarray(x_train, dtype=np.float32)
+    mean = x_train.mean(axis=0).astype(np.float32)
+    scale = x_train.std(axis=0).astype(np.float32)
+    scale[scale < 1e-6] = 1.0
+    x_scaled = (x_train - mean) / scale
+
+    config: dict = {
+        "dim_reduction": dim_reduction,
+        "mean": mean,
+        "scale": scale,
+    }
+    if dim_reduction == "none":
+        return config, x_scaled.astype(np.float32)
+
+    n_components = min(max(1, dim_components), x_scaled.shape[0] - 1, x_scaled.shape[1])
+    if dim_reduction == "pca":
+        reducer = PCA(n_components=n_components, svd_solver="randomized", random_state=RANDOM_SEED)
+        x_reduced = reducer.fit_transform(x_scaled).astype(np.float32)
+        config.update(
+            {
+                "components": reducer.components_.astype(np.float32),
+                "reducer_mean": reducer.mean_.astype(np.float32),
+                "explained_variance_ratio": reducer.explained_variance_ratio_.astype(np.float32),
+            }
+        )
+        return config, x_reduced
+
+    if dim_reduction == "svd":
+        reducer = TruncatedSVD(n_components=n_components, random_state=RANDOM_SEED)
+        x_reduced = reducer.fit_transform(x_scaled).astype(np.float32)
+        config.update(
+            {
+                "components": reducer.components_.astype(np.float32),
+                "explained_variance_ratio": reducer.explained_variance_ratio_.astype(np.float32),
+            }
+        )
+        return config, x_reduced
+
+    raise ValueError(f"Unsupported dim_reduction: {dim_reduction}")
+
+
+def _apply_feature_preprocessor(x: np.ndarray, config: dict) -> np.ndarray:
+    x = np.asarray(x, dtype=np.float32)
+    x_scaled = (x - config["mean"]) / config["scale"]
+    dim_reduction = str(config.get("dim_reduction", "none"))
+    if dim_reduction == "none":
+        return x_scaled.astype(np.float32)
+    centered = x_scaled
+    if dim_reduction == "pca":
+        centered = centered - config["reducer_mean"]
+    return (centered @ config["components"].T).astype(np.float32)
+
+
+def _save_feature_preprocessor(path: Path, config: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    arrays = {}
+    for key, value in config.items():
+        if isinstance(value, np.ndarray):
+            arrays[key] = value
+        else:
+            arrays[key] = np.asarray(value)
+    np.savez(path, **arrays)
+
+
+def _load_feature_preprocessor(path: Path) -> dict:
+    payload = np.load(path, allow_pickle=False)
+    config = {key: payload[key] for key in payload.files}
+    config["dim_reduction"] = str(config["dim_reduction"].item())
+    return config
+
+
+def _random_oversample(x_train: np.ndarray, y_train: np.ndarray, seed: int) -> tuple[np.ndarray, np.ndarray]:
+    counts = np.bincount(y_train, minlength=2)
+    if counts.min() == 0 or counts[0] == counts[1]:
+        return x_train, y_train
+    rng = np.random.default_rng(seed)
+    target = int(counts.max())
+    sampled_indices = []
+    for label in (0, 1):
+        label_indices = np.flatnonzero(y_train == label)
+        if len(label_indices) < target:
+            extra = rng.choice(label_indices, size=target - len(label_indices), replace=True)
+            label_indices = np.concatenate([label_indices, extra])
+        sampled_indices.append(label_indices)
+    indices = np.concatenate(sampled_indices)
+    rng.shuffle(indices)
+    return x_train[indices], y_train[indices]
 
 
 def _split_from_manifest(manifest: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
@@ -387,6 +511,7 @@ def _select_best_iteration_by_f1(
     x_val: np.ndarray,
     y_val: np.ndarray,
     forced_threshold: float | None,
+    threshold_objective: str,
 ) -> tuple[int, float, dict[str, float]]:
     total_rounds = _num_boost_rounds(model, backend)
     if total_rounds <= 0:
@@ -394,22 +519,19 @@ def _select_best_iteration_by_f1(
 
     best_iteration = 1
     best_threshold = 0.5
-    best_metrics = {
-        "f1_pos": -1.0,
-        "recall_pos": -1.0,
-    }
+    first_probabilities = _predict_proba_by_round(model, backend, x_val, 1)
+    best_metrics = _compute_metrics(y_val, first_probabilities, threshold=best_threshold)
 
     for iteration in range(1, total_rounds + 1):
         val_probabilities = _predict_proba_by_round(model, backend, x_val, iteration)
-        threshold, metrics = _select_threshold(y_val, val_probabilities, forced_threshold)
+        threshold, metrics = _select_threshold(
+            y_val,
+            val_probabilities,
+            forced_threshold,
+            objective=threshold_objective,
+        )
 
-        if metrics["f1_pos"] > best_metrics["f1_pos"] + 1e-8:
-            best_iteration = iteration
-            best_threshold = threshold
-            best_metrics = metrics
-            continue
-
-        if abs(metrics["f1_pos"] - best_metrics["f1_pos"]) <= 1e-8 and metrics["recall_pos"] > best_metrics["recall_pos"] + 1e-8:
+        if _is_better_for_objective(metrics, best_metrics, threshold_objective):
             best_iteration = iteration
             best_threshold = threshold
             best_metrics = metrics
@@ -438,6 +560,10 @@ def train_ml(
     backend: str,
     feature_mode: str,
     cpu_workers: int,
+    threshold_objective: str,
+    dim_reduction: str,
+    dim_components: int,
+    oversample: str,
 ) -> Path:
     _set_seed(seed)
 
@@ -467,6 +593,24 @@ def train_ml(
     x_val, y_val = _build_feature_matrix(val_df, feature_mode=feature_mode)
     x_test, y_test = _build_feature_matrix(test_df, feature_mode=feature_mode)
 
+    preprocessor_config, x_train = _fit_feature_preprocessor(
+        x_train,
+        dim_reduction=dim_reduction,
+        dim_components=dim_components,
+    )
+    x_val = _apply_feature_preprocessor(x_val, preprocessor_config)
+    x_test = _apply_feature_preprocessor(x_test, preprocessor_config)
+
+    if oversample == "random":
+        before_counts = np.bincount(y_train, minlength=2)
+        x_train, y_train = _random_oversample(x_train, y_train, seed=seed)
+        after_counts = np.bincount(y_train, minlength=2)
+        LOGGER.info(
+            "Applied random oversampling | before=%s after=%s",
+            before_counts.tolist(),
+            after_counts.tolist(),
+        )
+
     model = _train_classifier(
         x_train,
         y_train,
@@ -481,6 +625,7 @@ def train_ml(
         x_val=x_val,
         y_val=y_val,
         forced_threshold=threshold,
+        threshold_objective=threshold_objective,
     )
 
     test_probabilities = _predict_proba_by_round(model, resolved_backend, x_test, best_iteration)
@@ -500,23 +645,32 @@ def train_ml(
         "sample": sample,
         "sample_videos": int(sample_videos),
         "selected_threshold": float(selected_threshold),
-        "checkpoint_metric": "validation_f1_pos",
+        "checkpoint_metric": f"validation_{threshold_objective}",
+        "threshold_objective": threshold_objective,
         "validation_metrics": val_metrics,
         "test_metrics": test_metrics,
         "best_iteration": int(best_iteration),
         "feature_mode": feature_mode,
         "cpu_workers": int(resolved_workers),
+        "dim_reduction": dim_reduction,
+        "dim_components": int(dim_components),
+        "oversample": oversample,
     }
     summary_path = output_path.with_suffix(".summary.json")
+    preprocessor_path = output_path.with_suffix(".preprocess.npz")
+    _save_feature_preprocessor(preprocessor_path, preprocessor_config)
+    summary["preprocessor_path"] = str(preprocessor_path)
     summary_path.write_text(json.dumps(summary, indent=2))
 
     LOGGER.info(
-        "Validation | acc=%.4f recall1=%.4f precision1=%.4f f2=%.4f threshold=%.2f",
+        "Validation | acc=%.4f bal_acc=%.4f recall1=%.4f precision1=%.4f f2=%.4f threshold=%.2f objective=%s",
         val_metrics["accuracy"],
+        val_metrics["balanced_accuracy"],
         val_metrics["recall_pos"],
         val_metrics["precision_pos"],
         val_metrics["f2_pos"],
         selected_threshold,
+        threshold_objective,
     )
     LOGGER.info(
         "Test | acc=%.4f recall1=%.4f precision1=%.4f f2=%.4f threshold=%.2f",
@@ -559,10 +713,32 @@ def parse_args() -> argparse.Namespace:
         help="Feature engineering mode from each temporal sequence",
     )
     parser.add_argument(
+        "--dim-reduction",
+        type=str,
+        default="none",
+        choices=["none", "pca", "svd"],
+        help="Optional train-fitted dimensionality reduction before tree training.",
+    )
+    parser.add_argument("--dim-components", type=int, default=128, help="PCA/SVD components when enabled")
+    parser.add_argument(
+        "--oversample",
+        type=str,
+        default="none",
+        choices=["none", "random"],
+        help="Train-only minority oversampling. 'random' is dependency-free SMOTE-lite.",
+    )
+    parser.add_argument(
         "--cpu-workers",
         type=int,
         default=DEFAULT_CPU_WORKERS,
         help="Maximum CPU workers for tree training (recommended: 1-2)",
+    )
+    parser.add_argument(
+        "--threshold-objective",
+        type=str,
+        default="f2_pos",
+        choices=["accuracy", "balanced_accuracy", "f1_pos", "f2_pos"],
+        help="Validation metric for selecting the saved tree count and threshold.",
     )
     return parser.parse_args()
 
@@ -581,6 +757,10 @@ def main() -> None:
         backend=args.backend,
         feature_mode=args.feature_mode,
         cpu_workers=args.cpu_workers,
+        threshold_objective=args.threshold_objective,
+        dim_reduction=args.dim_reduction,
+        dim_components=args.dim_components,
+        oversample=args.oversample,
     )
 
 

@@ -64,6 +64,10 @@ class FocalLoss(nn.Module):
 def _objective_score(metrics: dict[str, float], objective: str, min_recall_pos: float) -> float:
     if objective == "balanced_accuracy":
         return float(metrics["balanced_accuracy"])
+    if objective == "accuracy":
+        return float(metrics["accuracy"])
+    if objective == "f1_macro":
+        return float(metrics["f1_macro"])
     if objective == "focused_recall":
         # Prefer candidates that satisfy recall target, then rank by class-1 F1.
         if metrics["recall_pos"] >= min_recall_pos:
@@ -276,6 +280,20 @@ def _is_better_for_objective(
             return True
         if abs(candidate["balanced_accuracy"] - incumbent["balanced_accuracy"]) <= 1e-8:
             return candidate["recall_pos"] > incumbent["recall_pos"] + 1e-8
+        return False
+
+    if objective == "accuracy":
+        if candidate["accuracy"] > incumbent["accuracy"] + 1e-8:
+            return True
+        if abs(candidate["accuracy"] - incumbent["accuracy"]) <= 1e-8:
+            return candidate["balanced_accuracy"] > incumbent["balanced_accuracy"] + 1e-8
+        return False
+
+    if objective == "f1_macro":
+        if candidate["f1_macro"] > incumbent["f1_macro"] + 1e-8:
+            return True
+        if abs(candidate["f1_macro"] - incumbent["f1_macro"]) <= 1e-8:
+            return candidate["balanced_accuracy"] > incumbent["balanced_accuracy"] + 1e-8
         return False
 
     # Default objective: maximize class-1 F1 (focused class quality).
@@ -1084,7 +1102,7 @@ def parse_args() -> argparse.Namespace:
         "--threshold-objective",
         type=str,
         default="balanced_accuracy",
-        choices=["f1_pos", "focused_recall", "balanced_accuracy"],
+        choices=["f1_pos", "focused_recall", "balanced_accuracy", "accuracy", "f1_macro"],
         help="Validation criterion for selecting decision threshold",
     )
     parser.add_argument(

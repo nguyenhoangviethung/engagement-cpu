@@ -26,11 +26,24 @@ RNN_TCN_KERNEL_SIZE="${RNN_TCN_KERNEL_SIZE:-5}"
 RNN_THRESHOLD_OBJECTIVE="${RNN_THRESHOLD_OBJECTIVE:-balanced_accuracy}"
 RNN_LOSS="${RNN_LOSS:-bce_weighted}"
 ML_CPU_WORKERS="${ML_CPU_WORKERS:?}"
+ML_THRESHOLD_OBJECTIVE="${ML_THRESHOLD_OBJECTIVE:-accuracy}"
+ML_DIM_REDUCTION="${ML_DIM_REDUCTION:-none}"
+ML_DIM_COMPONENTS="${ML_DIM_COMPONENTS:-128}"
+ML_OVERSAMPLE="${ML_OVERSAMPLE:-none}"
 CNN_MODEL="${CNN_MODEL:?}"
 CNN_BATCH_SIZE="${CNN_BATCH_SIZE:?}"
 CNN_EPOCHS="${CNN_EPOCHS:?}"
 CNN_IMAGE_SIZE="${CNN_IMAGE_SIZE:?}"
 CNN_FRAMES_PER_VIDEO="${CNN_FRAMES_PER_VIDEO:-8}"
+CNN_PRETRAINED="${CNN_PRETRAINED:-1}"
+CNN_FREEZE_BACKBONE="${CNN_FREEZE_BACKBONE:-0}"
+CNN_FORCE_EXTRACT="${CNN_FORCE_EXTRACT:-0}"
+CNN_LEARNING_RATE="${CNN_LEARNING_RATE:-3e-4}"
+CNN_WEIGHT_DECAY="${CNN_WEIGHT_DECAY:-1e-4}"
+CNN_PATIENCE="${CNN_PATIENCE:-6}"
+CNN_TRAIN_SAMPLER="${CNN_TRAIN_SAMPLER:-weighted}"
+CNN_THRESHOLD_OBJECTIVE="${CNN_THRESHOLD_OBJECTIVE:-accuracy}"
+EVAL_AGGREGATION="${EVAL_AGGREGATION:-video}"
 RUN_ROOT="${RUN_ROOT:?}"
 RUN_LOG="${RUN_LOG:?}"
 SUMMARY_JSON="${SUMMARY_JSON:?}"
@@ -49,6 +62,10 @@ sample_flag=""
 [[ "$SAMPLE_MODE" == "1" ]] && sample_flag=" --sample"
 amp_flag=""
 [[ "$USE_AMP" == "1" ]] && amp_flag=" --amp"
+cnn_pretrained_flag=""
+[[ "$CNN_PRETRAINED" == "1" ]] && cnn_pretrained_flag=" --pretrained"
+cnn_freeze_flag=""
+[[ "$CNN_FREEZE_BACKBONE" == "1" ]] && cnn_freeze_flag=" --freeze-backbone"
 
 localize_manifest() {
   local src_manifest="$1"
@@ -121,7 +138,19 @@ results_jsonl="$RUN_ROOT/results.jsonl"
 
 if [[ "$INCLUDE_CNN" == "1" ]]; then
   CNN_MANIFEST_EFFECTIVE="$CNN_MANIFEST"
-  if [[ ! -f "$CNN_MANIFEST_EFFECTIVE" ]]; then
+  if [[ "$CNN_FORCE_EXTRACT" != "1" && ! -f "$CNN_MANIFEST_EFFECTIVE" ]]; then
+    latest_existing_cnn_manifest="$(
+      find "$WORKDIR/data/processed/runs" -maxdepth 2 -name "cnn_frame_manifest.csv" -type f -printf '%T@ %p\n' 2>/dev/null \
+        | sort -nr \
+        | head -n 1 \
+        | cut -d' ' -f2-
+    )"
+    if [[ -n "$latest_existing_cnn_manifest" && -f "$latest_existing_cnn_manifest" ]]; then
+      CNN_MANIFEST_EFFECTIVE="$latest_existing_cnn_manifest"
+      echo "[CNN] manifest not found at $CNN_MANIFEST; reusing existing frame manifest: $CNN_MANIFEST_EFFECTIVE" | tee -a "$RUN_LOG"
+    fi
+  fi
+  if [[ "$CNN_FORCE_EXTRACT" == "1" || ! -f "$CNN_MANIFEST_EFFECTIVE" ]]; then
     CNN_MANIFEST_EFFECTIVE="$RUN_PROCESSED_ROOT/cnn_frame_manifest.csv"
     cnn_frames_dir="$RUN_PROCESSED_ROOT/cnn_frames"
     echo "[CNN] manifest not found; generating frame manifest at $CNN_MANIFEST_EFFECTIVE" | tee -a "$RUN_LOG"
@@ -142,10 +171,13 @@ if [[ "$INCLUDE_CNN" == "1" ]]; then
   echo "[CNN] rid=$rid" | tee -a "$RUN_LOG"
   "$WORKDIR/scripts/lib/run_python.sh" --env "$CONDA_ENV" --workdir "$WORKDIR" env PYTHONPATH="$WORKDIR/src" python -m engagement_daisee.cnn.train$sample_flag \
     --manifest "$CNN_MANIFEST_EFFECTIVE" --output "$ckpt" --run-id "$rid" --model "$CNN_MODEL" \
-    --image-size "$CNN_IMAGE_SIZE" --batch-size "$CNN_BATCH_SIZE" --epochs "$CNN_EPOCHS" --device "$DEVICE" 2>&1 | tee -a "$RUN_LOG"
+    --image-size "$CNN_IMAGE_SIZE" --batch-size "$CNN_BATCH_SIZE" --epochs "$CNN_EPOCHS" --device "$DEVICE" \
+    --lr "$CNN_LEARNING_RATE" --weight-decay "$CNN_WEIGHT_DECAY" --patience "$CNN_PATIENCE" \
+    --train-sampler "$CNN_TRAIN_SAMPLER" --threshold-objective "$CNN_THRESHOLD_OBJECTIVE"$cnn_pretrained_flag$cnn_freeze_flag 2>&1 | tee -a "$RUN_LOG"
 
   "$WORKDIR/scripts/lib/run_python.sh" --env "$CONDA_ENV" --workdir "$WORKDIR" env PYTHONPATH="$WORKDIR/src" python -m engagement_daisee.cnn.evaluate \
-    --manifest "$CNN_MANIFEST_EFFECTIVE" --checkpoint "$ckpt" --split test --batch-size 256 --device "$DEVICE" --output-json "$eval_json" 2>&1 | tee -a "$RUN_LOG"
+    --manifest "$CNN_MANIFEST_EFFECTIVE" --checkpoint "$ckpt" --split test --batch-size 256 --device "$DEVICE" \
+    --aggregation "$EVAL_AGGREGATION" --output-json "$eval_json" 2>&1 | tee -a "$RUN_LOG"
 
   "$WORKDIR/scripts/lib/run_python.sh" --env "$CONDA_ENV" --workdir "$WORKDIR" python - "$out_dir/engagement_cnn.json" "$eval_json" "$agg_json" "$rid" "$CNN_MODEL" <<'PY' | tee -a "$RUN_LOG" >> "$results_jsonl"
 import json, sys
@@ -177,7 +209,8 @@ for model in $RNN_MODELS; do
     --loss "$RNN_LOSS" 2>&1 | tee -a "$RUN_LOG"
 
   "$WORKDIR/scripts/lib/run_python.sh" --env "$CONDA_ENV" --workdir "$WORKDIR" env PYTHONPATH="$WORKDIR/src" python -m engagement_daisee.rnn.evaluate \
-    --manifest "$RNN_MANIFEST_LOCAL" --checkpoint "$ckpt" --split test --batch-size "$RNN_BATCH_SIZE" --output-json "$eval_json" 2>&1 | tee -a "$RUN_LOG"
+    --manifest "$RNN_MANIFEST_LOCAL" --checkpoint "$ckpt" --split test --batch-size "$RNN_BATCH_SIZE" \
+    --aggregation "$EVAL_AGGREGATION" --output-json "$eval_json" 2>&1 | tee -a "$RUN_LOG"
 
   "$WORKDIR/scripts/lib/run_python.sh" --env "$CONDA_ENV" --workdir "$WORKDIR" python - "${ckpt%.pt}.json" "$eval_json" "$agg_json" "$rid" "$model" <<'PY' | tee -a "$RUN_LOG" >> "$results_jsonl"
 import json, sys
@@ -201,17 +234,26 @@ if [[ "$INCLUDE_ML" == "1" ]]; then
 
   echo "[ML] rid=$rid" | tee -a "$RUN_LOG"
   "$WORKDIR/scripts/lib/run_python.sh" --env "$CONDA_ENV" --workdir "$WORKDIR" env PYTHONPATH="$WORKDIR/src" python -m engagement_daisee.ml.train$sample_flag \
-    --manifest "$ML_MANIFEST_LOCAL" --output "$model_path" --run-id "$rid" --backend auto --feature-mode tsfresh --cpu-workers "$ML_CPU_WORKERS" 2>&1 | tee -a "$RUN_LOG"
+    --manifest "$ML_MANIFEST_LOCAL" --output "$model_path" --run-id "$rid" --backend auto --feature-mode tsfresh \
+    --cpu-workers "$ML_CPU_WORKERS" --threshold-objective "$ML_THRESHOLD_OBJECTIVE" \
+    --dim-reduction "$ML_DIM_REDUCTION" --dim-components "$ML_DIM_COMPONENTS" --oversample "$ML_OVERSAMPLE" 2>&1 | tee -a "$RUN_LOG"
 
   model_path_effective="$model_path"
+  summary_path_effective="$out_dir/engagement_xgb.summary.json"
   runml_path="$RUNS_CHECKPOINT_DIR/trainml_${rid}/$(basename "$model_path")"
-  [[ -f "$runml_path" ]] && model_path_effective="$runml_path"
+  runml_summary_path="${runml_path%.json}.summary.json"
+  if [[ -f "$runml_path" ]]; then
+    model_path_effective="$runml_path"
+  fi
+  if [[ -f "$runml_summary_path" ]]; then
+    summary_path_effective="$runml_summary_path"
+  fi
 
   "$WORKDIR/scripts/lib/run_python.sh" --env "$CONDA_ENV" --workdir "$WORKDIR" env PYTHONPATH="$WORKDIR/src" python -m engagement_daisee.ml.evaluate \
     --manifest "$ML_MANIFEST_LOCAL" --model "$model_path_effective" --split test --feature-mode tsfresh \
-    --summary-json "$out_dir/engagement_xgb.summary.json" --output-json "$eval_json" 2>&1 | tee -a "$RUN_LOG"
+    --summary-json "$summary_path_effective" --aggregation "$EVAL_AGGREGATION" --output-json "$eval_json" 2>&1 | tee -a "$RUN_LOG"
 
-  "$WORKDIR/scripts/lib/run_python.sh" --env "$CONDA_ENV" --workdir "$WORKDIR" python - "$out_dir/engagement_xgb.summary.json" "$eval_json" "$agg_json" "$rid" <<'PY' | tee -a "$RUN_LOG" >> "$results_jsonl"
+  "$WORKDIR/scripts/lib/run_python.sh" --env "$CONDA_ENV" --workdir "$WORKDIR" python - "$summary_path_effective" "$eval_json" "$agg_json" "$rid" <<'PY' | tee -a "$RUN_LOG" >> "$results_jsonl"
 import json, sys
 from pathlib import Path
 train_path, eval_path, agg_path, rid = [Path(sys.argv[1]), Path(sys.argv[2]), Path(sys.argv[3]), sys.argv[4]]

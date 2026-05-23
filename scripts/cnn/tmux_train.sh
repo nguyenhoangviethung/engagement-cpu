@@ -17,8 +17,8 @@ EPOCHS=20
 LEARNING_RATE=3e-4
 WEIGHT_DECAY=1e-4
 PATIENCE=6
-IMAGE_SIZE=112
-USE_PRETRAINED=0
+IMAGE_SIZE=224
+USE_PRETRAINED=1
 FREEZE_BACKBONE=0
 TRAIN_SAMPLER="weighted"
 EXAMPLE_MODE=0
@@ -42,6 +42,7 @@ Options:
   --patience N
   --image-size N
   --pretrained
+  --no-pretrained
   --freeze-backbone
   --train-sampler NAME     weighted | shuffle
   --device NAME
@@ -65,6 +66,7 @@ while [[ $# -gt 0 ]]; do
     --patience) PATIENCE="$2"; shift 2 ;;
     --image-size) IMAGE_SIZE="$2"; shift 2 ;;
     --pretrained) USE_PRETRAINED=1; shift ;;
+    --no-pretrained) USE_PRETRAINED=0; shift ;;
     --freeze-backbone) FREEZE_BACKBONE=1; shift ;;
     --train-sampler) TRAIN_SAMPLER="$2"; shift 2 ;;
     --device) DEVICE="$2"; shift 2 ;;

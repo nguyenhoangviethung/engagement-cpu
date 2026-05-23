@@ -3,6 +3,7 @@ import logging
 import math
 import random
 import time
+import urllib.request
 from pathlib import Path
 
 import cv2
@@ -11,7 +12,6 @@ import numpy as np
 import pandas as pd
 
 from engagement_daisee.common.config import (
-    FEATURE_DIM,
     FEATURE_MANIFEST_CSV,
     FEATURES_DIR,
     PROCESSED_LABELS_CSV,
@@ -24,16 +24,73 @@ from engagement_daisee.common.config import (
 
 LEFT_EYE = [33, 160, 158, 133, 153, 144]
 RIGHT_EYE = [362, 385, 387, 263, 373, 380]
-FLATTEN_LANDMARKS = [33, 133, 362, 263, 61, 291, 13, 14]
-FRAME_FEATURE_DIM = 30
-
-if FRAME_FEATURE_DIM * 3 != FEATURE_DIM:
-    raise ValueError(
-        f"Configured FEATURE_DIM={FEATURE_DIM} must equal 3 * FRAME_FEATURE_DIM ({FRAME_FEATURE_DIM * 3})"
-    )
+BASE_LANDMARKS = [33, 133, 362, 263, 61, 291, 13, 14]
+ENHANCED_LANDMARKS = [
+    1,
+    4,
+    10,
+    33,
+    46,
+    52,
+    61,
+    78,
+    93,
+    133,
+    152,
+    159,
+    168,
+    172,
+    197,
+    234,
+    263,
+    276,
+    282,
+    291,
+    308,
+    323,
+    362,
+    386,
+    454,
+]
 
 
 LOGGER = logging.getLogger("extract_features")
+FACE_LANDMARKER_MODEL_URL = (
+    "https://storage.googleapis.com/mediapipe-models/face_landmarker/"
+    "face_landmarker/float16/latest/face_landmarker.task"
+)
+FACE_LANDMARKER_MODEL_PATH = Path.home() / ".cache" / "engagement_daisee" / "face_landmarker.task"
+
+
+class _TaskLandmarkList:
+    def __init__(self, landmarks) -> None:
+        self.landmark = landmarks
+
+
+class _TaskFaceLandmarker:
+    def __init__(self, model_path: Path) -> None:
+        from mediapipe.tasks.python import vision
+        from mediapipe.tasks.python.core.base_options import BaseOptions
+        from mediapipe.tasks.python.vision.core.vision_task_running_mode import VisionTaskRunningMode
+
+        options = vision.FaceLandmarkerOptions(
+            base_options=BaseOptions(model_asset_path=str(model_path)),
+            running_mode=VisionTaskRunningMode.IMAGE,
+            num_faces=1,
+            min_face_detection_confidence=0.5,
+            min_face_presence_confidence=0.5,
+            min_tracking_confidence=0.5,
+        )
+        self._detector = vision.FaceLandmarker.create_from_options(options)
+
+    def process(self, rgb_frame):
+        image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
+        result = self._detector.detect(image)
+        faces = [_TaskLandmarkList(face) for face in result.face_landmarks]
+        return type("FaceMeshResult", (), {"multi_face_landmarks": faces})()
+
+    def close(self) -> None:
+        self._detector.close()
 
 
 def _setup_logging() -> None:
@@ -42,6 +99,29 @@ def _setup_logging() -> None:
         format="%(asctime)s | %(levelname)s | %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
+
+
+def _ensure_face_landmarker_model(model_path: Path = FACE_LANDMARKER_MODEL_PATH) -> Path:
+    if model_path.exists() and model_path.stat().st_size > 0:
+        return model_path
+    model_path.parent.mkdir(parents=True, exist_ok=True)
+    LOGGER.info("Downloading MediaPipe FaceLandmarker model to %s", model_path)
+    urllib.request.urlretrieve(FACE_LANDMARKER_MODEL_URL, model_path)
+    return model_path
+
+
+def _create_face_landmarker():
+    solutions = getattr(mp, "solutions", None)
+    if solutions is not None and hasattr(solutions, "face_mesh"):
+        return solutions.face_mesh.FaceMesh(
+            static_image_mode=False,
+            max_num_faces=1,
+            refine_landmarks=True,
+            min_detection_confidence=0.5,
+            min_tracking_confidence=0.5,
+        )
+    model_path = _ensure_face_landmarker_model()
+    return _TaskFaceLandmarker(model_path)
 
 
 def _lm_xy(landmarks, index: int) -> np.ndarray:
@@ -80,7 +160,7 @@ def _mouth_aspect_ratio(landmarks) -> float:
     return vertical / horizontal
 
 
-def _head_pose_proxy(landmarks) -> np.ndarray:
+def _face_geometry_proxy(landmarks) -> np.ndarray:
     nose = _lm_xy(landmarks, 1)
     chin = _lm_xy(landmarks, 152)
     left_eye = _lm_xy(landmarks, 33)
@@ -96,28 +176,60 @@ def _head_pose_proxy(landmarks) -> np.ndarray:
     yaw = (nose[0] - eye_center[0]) / face_width
     pitch = (nose[1] - mouth_center[1]) / face_height
     roll = math.atan2(float(right_eye[1] - left_eye[1]), float(right_eye[0] - left_eye[0]) + 1e-6)
-    return np.array([pitch, yaw, roll], dtype=np.float32)
+    mouth_width = _distance(mouth_left, mouth_right) / face_width
+    eye_mouth_distance = _distance(eye_center, mouth_center) / face_height
+    nose_chin_distance = _distance(nose, chin) / face_height
+    return np.array(
+        [pitch, yaw, roll, face_width, face_height, mouth_width, eye_mouth_distance, nose_chin_distance],
+        dtype=np.float32,
+    )
 
 
-def _build_frame_feature(landmarks) -> np.ndarray:
+def _build_frame_feature(landmarks, feature_set: str) -> np.ndarray:
     features = [
         _eye_aspect_ratio(landmarks, LEFT_EYE),
         _eye_aspect_ratio(landmarks, RIGHT_EYE),
         _mouth_aspect_ratio(landmarks),
     ]
-    features.extend(_head_pose_proxy(landmarks).tolist())
-    for landmark_index in FLATTEN_LANDMARKS:
+    geometry = _face_geometry_proxy(landmarks)
+    if feature_set == "base":
+        features.extend(geometry[:3].tolist())
+        landmark_indices = BASE_LANDMARKS
+    elif feature_set == "enhanced":
+        features.extend(geometry.tolist())
+        left_eye_center = (_lm_xy(landmarks, 33) + _lm_xy(landmarks, 133)) / 2.0
+        right_eye_center = (_lm_xy(landmarks, 362) + _lm_xy(landmarks, 263)) / 2.0
+        mouth_center = (_lm_xy(landmarks, 61) + _lm_xy(landmarks, 291)) / 2.0
+        nose = _lm_xy(landmarks, 1)
+        face_width = float(geometry[3]) + 1e-6
+        face_height = float(geometry[4]) + 1e-6
+        features.extend(((nose - left_eye_center) / face_width).tolist())
+        features.extend(((nose - right_eye_center) / face_width).tolist())
+        features.extend(((mouth_center - nose) / face_height).tolist())
+        landmark_indices = ENHANCED_LANDMARKS
+    else:
+        raise ValueError(f"Unsupported feature_set: {feature_set}")
+
+    for landmark_index in landmark_indices:
         features.extend(_lm_xyz(landmarks, landmark_index).tolist())
     return np.asarray(features, dtype=np.float32)
 
 
-def _empty_feature() -> np.ndarray:
-    return np.zeros(FRAME_FEATURE_DIM, dtype=np.float32)
+def _frame_feature_dim(feature_set: str) -> int:
+    if feature_set == "base":
+        return 3 + 3 + len(BASE_LANDMARKS) * 3
+    if feature_set == "enhanced":
+        return 3 + 8 + 6 + len(ENHANCED_LANDMARKS) * 3
+    raise ValueError(f"Unsupported feature_set: {feature_set}")
 
 
-def _pad_sequence(sequence: list[np.ndarray]) -> np.ndarray:
+def _empty_feature(feature_set: str) -> np.ndarray:
+    return np.zeros(_frame_feature_dim(feature_set), dtype=np.float32)
+
+
+def _pad_sequence(sequence: list[np.ndarray], feature_set: str) -> np.ndarray:
     if not sequence:
-        return np.zeros((SEQUENCE_LENGTH, FRAME_FEATURE_DIM), dtype=np.float32)
+        return np.zeros((SEQUENCE_LENGTH, _frame_feature_dim(feature_set)), dtype=np.float32)
 
     stacked_sequence = np.stack(sequence, axis=0).astype(np.float32)
     if len(sequence) >= SEQUENCE_LENGTH:
@@ -128,11 +240,11 @@ def _pad_sequence(sequence: list[np.ndarray]) -> np.ndarray:
     return np.concatenate([stacked_sequence, edge_padding], axis=0)
 
 
-def _window_frames(frame_features: list[np.ndarray]) -> list[np.ndarray]:
+def _window_frames(frame_features: list[np.ndarray], feature_set: str) -> list[np.ndarray]:
     windows: list[np.ndarray] = []
     for start_index in range(0, len(frame_features), SEQUENCE_LENGTH):
         chunk = frame_features[start_index : start_index + SEQUENCE_LENGTH]
-        padded_chunk = _pad_sequence(chunk)
+        padded_chunk = _pad_sequence(chunk, feature_set=feature_set)
 
         velocity = np.zeros_like(padded_chunk, dtype=np.float32)
         velocity[1:] = padded_chunk[1:] - padded_chunk[:-1]
@@ -141,10 +253,6 @@ def _window_frames(frame_features: list[np.ndarray]) -> list[np.ndarray]:
         std_matrix = np.tile(window_std, (SEQUENCE_LENGTH, 1))
 
         enriched_chunk = np.concatenate([padded_chunk, velocity, std_matrix], axis=-1).astype(np.float32, copy=False)
-        if enriched_chunk.shape[-1] != FEATURE_DIM:
-            raise ValueError(
-                f"Unexpected enriched feature dim: got {enriched_chunk.shape[-1]}, expected {FEATURE_DIM}"
-            )
         windows.append(enriched_chunk)
     return windows
 
@@ -187,33 +295,66 @@ def _resolve_video_path(video_id: str, raw_video_dir: Path, video_index: dict[st
     return None
 
 
-def _extract_video_features(video_path: Path) -> list[np.ndarray]:
+def _selected_frame_indices(total_frames: int, frame_stride: int, max_frames: int) -> set[int] | None:
+    if max_frames > 0 and total_frames > max_frames:
+        return set(int(i) for i in np.linspace(0, total_frames - 1, num=max_frames, dtype=np.int64))
+    if frame_stride > 1 and total_frames > 0:
+        return set(range(0, total_frames, frame_stride))
+    return None
+
+
+def _resize_for_landmarks(frame, resize_width: int):
+    if resize_width <= 0 or frame.shape[1] <= resize_width:
+        return frame
+    scale = resize_width / float(frame.shape[1])
+    height = max(1, int(round(frame.shape[0] * scale)))
+    return cv2.resize(frame, (resize_width, height), interpolation=cv2.INTER_AREA)
+
+
+def _extract_video_features(
+    video_path: Path,
+    frame_stride: int = 1,
+    max_frames: int = 0,
+    resize_width: int = 0,
+    feature_set: str = "base",
+    face_mesh=None,
+) -> list[np.ndarray]:
     frame_features: list[np.ndarray] = []
     capture = cv2.VideoCapture(str(video_path))
     if not capture.isOpened():
         return frame_features
-
-    face_mesh = mp.solutions.face_mesh.FaceMesh(
-        static_image_mode=False,
-        max_num_faces=1,
-        refine_landmarks=True,
-        min_detection_confidence=0.5,
-        min_tracking_confidence=0.5,
+    total_frames = int(capture.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+    selected_indices = _selected_frame_indices(
+        total_frames=total_frames,
+        frame_stride=max(1, frame_stride),
+        max_frames=max(0, max_frames),
     )
+
+    close_face_mesh = False
+    if face_mesh is None:
+        face_mesh = _create_face_landmarker()
+        close_face_mesh = True
     try:
+        frame_index = 0
         while True:
             success, frame = capture.read()
             if not success:
                 break
+            if selected_indices is not None and frame_index not in selected_indices:
+                frame_index += 1
+                continue
+            frame = _resize_for_landmarks(frame, resize_width=resize_width)
             rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             results = face_mesh.process(rgb_frame)
             if results.multi_face_landmarks:
-                frame_features.append(_build_frame_feature(results.multi_face_landmarks[0]))
+                frame_features.append(_build_frame_feature(results.multi_face_landmarks[0], feature_set=feature_set))
             else:
-                frame_features.append(_empty_feature())
+                frame_features.append(_empty_feature(feature_set=feature_set))
+            frame_index += 1
     finally:
         capture.release()
-        face_mesh.close()
+        if close_face_mesh:
+            face_mesh.close()
 
     return frame_features
 
@@ -255,17 +396,26 @@ def extract_features(
     sample: bool = False,
     seed: int = 42,
     log_every: int = 10,
+    frame_stride: int = 1,
+    max_frames: int = 0,
+    resize_width: int = 0,
+    feature_set: str = "base",
 ) -> Path:
     start_time = time.time()
     LOGGER.info("Starting feature extraction")
     LOGGER.info(
-        "Config | labels=%s | videos=%s | features=%s | manifest=%s | sample=%s | seed=%d",
+        "Config | labels=%s | videos=%s | features=%s | manifest=%s | sample=%s | seed=%d | frame_stride=%d | max_frames=%d | resize_width=%d | feature_set=%s | output_dim=%d",
         processed_labels_csv,
         raw_video_dir,
         features_dir,
         manifest_csv,
         sample,
         seed,
+        frame_stride,
+        max_frames,
+        resize_width,
+        feature_set,
+        _frame_feature_dim(feature_set) * 3,
     )
 
     labels_df = _collect_video_records(processed_labels_csv)
@@ -292,48 +442,64 @@ def extract_features(
 
     LOGGER.info("Processing %d videos", total_rows)
 
-    for row_index, row in enumerate(rows, start=1):
-        video_id = str(row["video_id"])
-        video_path = _resolve_video_path(video_id, raw_video_dir, video_index)
-        if video_path is None:
-            unresolved_count += 1
-            LOGGER.warning("Skipping unresolved video | video_id=%s", video_id)
-            continue
+    face_mesh = _create_face_landmarker()
+    try:
+        for row_index, row in enumerate(rows, start=1):
+            video_id = str(row["video_id"])
+            video_path = _resolve_video_path(video_id, raw_video_dir, video_index)
+            if video_path is None:
+                unresolved_count += 1
+                LOGGER.warning("Skipping unresolved video | video_id=%s", video_id)
+                continue
 
-        raw_features = _extract_video_features(video_path)
-        if not raw_features:
-            unreadable_count += 1
-            LOGGER.warning("Skipping unreadable or empty video | video_path=%s", video_path)
-            continue
-
-        sequences = _window_frames(raw_features)
-        saved_videos += 1
-        for segment_index, sequence in enumerate(sequences):
-            sequence_file = features_dir / f"{Path(video_id).stem}_seg{segment_index:04d}.npy"
-            np.save(sequence_file, sequence.astype(np.float32))
-            saved_sequences += 1
-            manifest_rows.append(
-                {
-                    "feature_path": str(sequence_file),
-                    "video_id": video_id,
-                    "video_path": str(video_path),
-                    "label": int(row["engagement_binary"]),
-                    "split": str(row.get("split", "unknown")).lower(),
-                    "segment_index": segment_index,
-                    "num_frames": int(len(raw_features)),
-                }
+            raw_features = _extract_video_features(
+                video_path,
+                frame_stride=frame_stride,
+                max_frames=max_frames,
+                resize_width=resize_width,
+                feature_set=feature_set,
+                face_mesh=face_mesh,
             )
+            if not raw_features:
+                unreadable_count += 1
+                LOGGER.warning("Skipping unreadable or empty video | video_path=%s", video_path)
+                continue
 
-        if row_index % max(1, log_every) == 0 or row_index == total_rows:
-            LOGGER.info(
-                "Progress %d/%d | saved_videos=%d | saved_sequences=%d | unresolved=%d | unreadable=%d",
-                row_index,
-                total_rows,
-                saved_videos,
-                saved_sequences,
-                unresolved_count,
-                unreadable_count,
-            )
+            sequences = _window_frames(raw_features, feature_set=feature_set)
+            saved_videos += 1
+            for segment_index, sequence in enumerate(sequences):
+                sequence_file = features_dir / f"{Path(video_id).stem}_seg{segment_index:04d}.npy"
+                np.save(sequence_file, sequence.astype(np.float32))
+                saved_sequences += 1
+                manifest_rows.append(
+                    {
+                        "feature_path": str(sequence_file),
+                        "video_id": video_id,
+                        "video_path": str(video_path),
+                        "label": int(row["engagement_binary"]),
+                        "split": str(row.get("split", "unknown")).lower(),
+                        "segment_index": segment_index,
+                        "num_frames": int(len(raw_features)),
+                        "frame_stride": int(max(1, frame_stride)),
+                        "max_frames": int(max(0, max_frames)),
+                        "resize_width": int(max(0, resize_width)),
+                        "feature_set": feature_set,
+                        "feature_dim": int(sequences[0].shape[-1]),
+                    }
+                )
+
+            if row_index % max(1, log_every) == 0 or row_index == total_rows:
+                LOGGER.info(
+                    "Progress %d/%d | saved_videos=%d | saved_sequences=%d | unresolved=%d | unreadable=%d",
+                    row_index,
+                    total_rows,
+                    saved_videos,
+                    saved_sequences,
+                    unresolved_count,
+                    unreadable_count,
+                )
+    finally:
+        face_mesh.close()
 
     manifest_df = pd.DataFrame(manifest_rows)
     manifest_df.to_csv(manifest_csv, index=False)
@@ -362,6 +528,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--sample", action="store_true", help="Process only 10 random videos for a quick test run")
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
     parser.add_argument("--log-every", type=int, default=10, help="Log progress every N videos")
+    parser.add_argument("--frame-stride", type=int, default=1, help="Process every Nth frame before windowing")
+    parser.add_argument("--max-frames", type=int, default=0, help="Uniformly sample at most N frames per video; 0 keeps all")
+    parser.add_argument("--resize-width", type=int, default=0, help="Resize frames to this width before landmark detection; 0 disables")
+    parser.add_argument("--feature-set", type=str, default="base", choices=["base", "enhanced"], help="Facial feature recipe")
     return parser.parse_args()
 
 
@@ -376,6 +546,10 @@ def main() -> None:
         sample=args.sample,
         seed=args.seed,
         log_every=args.log_every,
+        frame_stride=args.frame_stride,
+        max_frames=args.max_frames,
+        resize_width=args.resize_width,
+        feature_set=args.feature_set,
     )
     LOGGER.info("Saved feature manifest to %s", manifest_path)
 

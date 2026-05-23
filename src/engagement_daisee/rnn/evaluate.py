@@ -82,6 +82,17 @@ def _build_loader(dataset: FeatureSequenceDataset, indices: list[int], batch_siz
     )
 
 
+def _aggregate_by_video(manifest_subset: pd.DataFrame, labels: np.ndarray, probabilities: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    if "video_id" not in manifest_subset.columns:
+        return labels, probabilities
+
+    frame = manifest_subset[["video_id"]].copy().reset_index(drop=True)
+    frame["label"] = labels.astype(np.int64)
+    frame["probability"] = probabilities.astype(np.float32)
+    grouped = frame.groupby("video_id", sort=False).agg({"label": "max", "probability": "mean"})
+    return grouped["label"].to_numpy(dtype=np.int64), grouped["probability"].to_numpy(dtype=np.float32)
+
+
 @torch.no_grad()
 def _evaluate(
     model: torch.nn.Module,
@@ -89,7 +100,7 @@ def _evaluate(
     threshold: float,
     feature_mean: torch.Tensor | None,
     feature_std: torch.Tensor | None,
-) -> tuple[float, dict[str, float]]:
+) -> tuple[float, dict[str, float], np.ndarray, np.ndarray]:
     model.eval()
     criterion = torch.nn.BCEWithLogitsLoss()
 
@@ -119,7 +130,7 @@ def _evaluate(
     labels_np = np.concatenate(all_labels).astype(np.int64)
     metrics = _compute_binary_metrics(labels_np, probs_np, threshold=threshold)
     avg_loss = total_loss / max(1, total_samples)
-    return avg_loss, metrics
+    return avg_loss, metrics, labels_np, probs_np
 
 
 def run_eval(
@@ -129,6 +140,7 @@ def run_eval(
     batch_size: int,
     threshold: float | None,
     output_json: Path | None,
+    aggregation: str,
 ) -> dict:
     dataset = FeatureSequenceDataset(manifest_path)
     manifest_df = dataset.manifest
@@ -161,23 +173,31 @@ def run_eval(
 
     indices = split_map[split_name]
     loader = _build_loader(dataset, indices, batch_size=batch_size)
-    loss, metrics = _evaluate(
+    loss, row_metrics, labels, probabilities = _evaluate(
         model=model,
         loader=loader,
         threshold=resolved_threshold,
         feature_mean=feature_mean,
         feature_std=feature_std,
     )
+    manifest_subset = manifest_df.iloc[indices].reset_index(drop=True)
+    video_labels, video_probabilities = _aggregate_by_video(manifest_subset, labels, probabilities)
+    video_metrics = _compute_binary_metrics(video_labels, video_probabilities, threshold=resolved_threshold)
+    selected_metrics = video_metrics if aggregation == "video" else row_metrics
 
     report = {
         "manifest": str(manifest_path),
         "checkpoint": str(checkpoint_path),
         "split": split_name,
         "rows": int(len(indices)),
+        "videos": int(len(video_labels)),
         "batch_size": int(batch_size),
         "threshold": float(resolved_threshold),
+        "aggregation": aggregation,
         "loss": float(loss),
-        "metrics": metrics,
+        "metrics": selected_metrics,
+        "row_metrics": row_metrics,
+        "video_metrics": video_metrics,
         "model_kwargs": model_kwargs,
     }
 
@@ -196,6 +216,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--batch-size", type=int, default=128, help="Eval batch size")
     parser.add_argument("--threshold", type=float, default=None, help="Override decision threshold")
     parser.add_argument("--output-json", type=Path, default=None, help="Optional report output json")
+    parser.add_argument("--aggregation", type=str, default="rows", choices=["rows", "video"])
     return parser.parse_args()
 
 
@@ -208,6 +229,7 @@ def main() -> None:
         batch_size=args.batch_size,
         threshold=args.threshold,
         output_json=args.output_json,
+        aggregation=args.aggregation,
     )
     print(json.dumps(report, indent=2))
 
