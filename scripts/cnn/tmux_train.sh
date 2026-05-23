@@ -22,6 +22,7 @@ USE_PRETRAINED=0
 FREEZE_BACKBONE=0
 TRAIN_SAMPLER="weighted"
 EXAMPLE_MODE=0
+DEVICE="cuda"
 
 usage() {
   cat <<'EOF'
@@ -43,6 +44,7 @@ Options:
   --pretrained
   --freeze-backbone
   --train-sampler NAME     weighted | shuffle
+  --device NAME
   --session NAME
   --env NAME
   --example                Run tmux smoke test (python --help only)
@@ -65,6 +67,7 @@ while [[ $# -gt 0 ]]; do
     --pretrained) USE_PRETRAINED=1; shift ;;
     --freeze-backbone) FREEZE_BACKBONE=1; shift ;;
     --train-sampler) TRAIN_SAMPLER="$2"; shift 2 ;;
+    --device) DEVICE="$2"; shift 2 ;;
     --session) SESSION_NAME="$2"; shift 2 ;;
     --env) CONDA_ENV="$2"; shift 2 ;;
     --example) EXAMPLE_MODE=1; shift ;;
@@ -128,7 +131,8 @@ mkdir -p "$run_checkpoint_dir"
   --weight-decay "$WEIGHT_DECAY" \\
   --patience "$PATIENCE" \\
   --train-sampler "$TRAIN_SAMPLER" \\
-  --run-id "$active_run_id"$pretrained_flag$freeze_flag 2>&1 | tee -a "$run_log"
+  --run-id "$active_run_id" \\
+  --device "$DEVICE"$pretrained_flag$freeze_flag 2>&1 | tee -a "$run_log"
 echo "=== CNN train finished at \$(date) ===" | tee -a "$run_log"
 ln -sfn "$run_log" "$LATEST_LOG_LINK"
 EOF

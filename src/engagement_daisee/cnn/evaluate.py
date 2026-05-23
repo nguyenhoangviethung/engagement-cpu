@@ -45,7 +45,10 @@ def run_eval(
     batch_size: int,
     threshold: float | None,
     output_json: Path | None,
+    device: str,
 ) -> dict:
+    if device == "cuda" and not torch.cuda.is_available():
+        device = "cpu"
     manifest_df = pd.read_csv(manifest_path)
     train_indices, val_indices, test_indices = _split_indices(manifest_df)
 
@@ -58,7 +61,7 @@ def run_eval(
     if split_name not in split_map:
         raise ValueError(f"Unsupported split: {split}")
 
-    checkpoint = torch.load(checkpoint_path, map_location="cpu")
+    checkpoint = torch.load(checkpoint_path, map_location=device)
     model_name = str(checkpoint.get("model_name", "mobilenet_v3_small"))
     image_size = int(checkpoint.get("image_size", 112))
     default_threshold = float(checkpoint.get("best_threshold", 0.5))
@@ -66,13 +69,13 @@ def run_eval(
 
     model = build_cnn_model(model_name=model_name, pretrained=False, freeze_backbone=False)
     model.load_state_dict(checkpoint["model_state_dict"])
-    model = model.to("cpu").eval()
+    model = model.to(device).eval()
 
     dataset = DAiSEECNNFrameDataset(manifest_csv=manifest_path, transform=_build_transform(image_size=image_size, train=False))
     loader = _build_loader(dataset=dataset, indices=split_map[split_name], batch_size=batch_size)
 
     criterion = nn.BCEWithLogitsLoss()
-    loss, labels, probs = _run_epoch(model=model, loader=loader, criterion=criterion, device="cpu", optimizer=None)
+    loss, labels, probs = _run_epoch(model=model, loader=loader, criterion=criterion, device=device, optimizer=None)
     metrics = _compute_metrics(labels=labels, probs=probs, threshold=resolved_threshold)
 
     report = {
@@ -83,6 +86,7 @@ def run_eval(
         "batch_size": int(batch_size),
         "model_name": model_name,
         "image_size": image_size,
+        "device": device,
         "threshold": resolved_threshold,
         "loss": float(loss),
         "metrics": metrics,
@@ -103,6 +107,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--batch-size", type=int, default=256)
     parser.add_argument("--threshold", type=float, default=None, help="Override decision threshold")
     parser.add_argument("--output-json", type=Path, default=None, help="Optional report output path")
+    parser.add_argument("--device", type=str, default="cpu", choices=["cpu", "cuda"])
     return parser.parse_args()
 
 
@@ -115,6 +120,7 @@ def main() -> None:
         batch_size=args.batch_size,
         threshold=args.threshold,
         output_json=args.output_json,
+        device=args.device,
     )
     print(json.dumps(report, indent=2))
 

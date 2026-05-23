@@ -22,6 +22,7 @@ PATIENCE=6
 USE_PRETRAINED=0
 FREEZE_BACKBONE=0
 TRAIN_SAMPLER="weighted"
+DEVICE="cuda"
 
 usage() {
   cat <<'EOF'
@@ -50,6 +51,7 @@ Options:
   --pretrained             Use ImageNet weights if available
   --freeze-backbone        Freeze backbone and train head only
   --train-sampler NAME     weighted | shuffle
+  --device NAME             cpu | cuda
   --help                   Show this help
 EOF
 }
@@ -118,6 +120,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --train-sampler)
       TRAIN_SAMPLER="$2"
+      shift 2
+      ;;
+    --device)
+      DEVICE="$2"
       shift 2
       ;;
     --help|-h)
@@ -195,7 +201,8 @@ echo "[3/3] train_cnn.py$sample_flag" | tee -a "$run_log"
   --lr "$LEARNING_RATE" \\
   --weight-decay "$WEIGHT_DECAY" \\
   --patience "$PATIENCE" \\
-  --train-sampler "$TRAIN_SAMPLER"$pretrained_flag$freeze_flag 2>&1 | tee -a "$run_log"
+  --train-sampler "$TRAIN_SAMPLER" \\
+  --device "$DEVICE"$pretrained_flag$freeze_flag 2>&1 | tee -a "$run_log"
 
 echo "=== CNN pipeline finished at \$(date) ===" | tee -a "$run_log"
 ln -sfn "$run_log" "$LATEST_LOG_LINK"
@@ -247,4 +254,3 @@ case "$COMMAND" in
     exit 1
     ;;
 esac
-

@@ -70,7 +70,7 @@ fi
 mkdir -p "$(dirname "$TARGET_DIR")"
 
 echo "[1/4] Downloading dataset with kagglehub..."
-DOWNLOAD_PATH="$("$WORKDIR/scripts/lib/run_python.sh" --env "$CONDA_ENV" --workdir "$WORKDIR" python - <<'PY'
+DOWNLOAD_OUTPUT="$("$WORKDIR/scripts/lib/run_python.sh" --env "$CONDA_ENV" --workdir "$WORKDIR" python - <<'PY'
 from pathlib import Path
 import kagglehub
 
@@ -78,6 +78,7 @@ path = Path(kagglehub.dataset_download("olgaparfenova/daisee")).resolve()
 print(path)
 PY
 )"
+DOWNLOAD_PATH="$(printf '%s\n' "$DOWNLOAD_OUTPUT" | awk '/^\// { path=$0 } END { print path }')"
 
 if [[ -z "${DOWNLOAD_PATH:-}" ]]; then
   echo "ERROR: Could not resolve Kaggle download path."

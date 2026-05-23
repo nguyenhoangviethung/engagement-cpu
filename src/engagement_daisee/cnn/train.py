@@ -20,7 +20,7 @@ from engagement_daisee.cnn.model import build_cnn_model
 from engagement_daisee.common.config import (
     BATCH_SIZE,
     CHECKPOINT_DIR,
-    DEVICE,
+    DEVICE as DEFAULT_DEVICE,
     EPOCHS,
     NUM_WORKERS,
     RANDOM_SEED,
@@ -248,7 +248,7 @@ def _run_epoch(
             optimizer.zero_grad(set_to_none=True)
 
         with torch.set_grad_enabled(is_train):
-            logits = model(images)
+            logits = model(images).view(-1)
             loss = criterion(logits, labels)
             if is_train:
                 loss.backward()
@@ -284,9 +284,13 @@ def train_cnn(
     pretrained: bool = False,
     freeze_backbone: bool = False,
     sampler_strategy: str = "weighted",
+    device: str = DEFAULT_DEVICE,
 ) -> Path:
     _set_seed(seed)
     torch.set_num_threads(max(1, os.cpu_count() or 1))
+    if device == "cuda" and not torch.cuda.is_available():
+        LOGGER.warning("CUDA requested but unavailable; falling back to CPU.")
+        device = "cpu"
 
     manifest_csv = _resolve_manifest_path(manifest_csv, run_id)
     manifest_df = pd.read_csv(manifest_csv)
@@ -312,6 +316,7 @@ def train_cnn(
         len(test_indices),
         sample,
     )
+    LOGGER.info("Using device: %s", device)
 
     train_dataset = DAiSEECNNFrameDataset(manifest_csv=manifest_csv, transform=_build_transform(image_size, train=True))
     eval_dataset = DAiSEECNNFrameDataset(manifest_csv=manifest_csv, transform=_build_transform(image_size, train=False))
@@ -340,8 +345,8 @@ def train_cnn(
     negatives = float(len(train_labels) - positives)
     pos_weight = negatives / max(1.0, positives)
 
-    model = build_cnn_model(model_name=model_name, pretrained=pretrained, freeze_backbone=freeze_backbone).to(DEVICE)
-    criterion = nn.BCEWithLogitsLoss(pos_weight=torch.tensor(pos_weight, dtype=torch.float32)).to(DEVICE)
+    model = build_cnn_model(model_name=model_name, pretrained=pretrained, freeze_backbone=freeze_backbone).to(device)
+    criterion = nn.BCEWithLogitsLoss(pos_weight=torch.tensor(pos_weight, dtype=torch.float32)).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min", factor=0.5, patience=2)
     stopper = EarlyStopping(patience=patience)
@@ -352,10 +357,10 @@ def train_cnn(
     history: list[dict] = []
 
     for epoch in range(1, epochs + 1):
-        train_loss, train_labels_np, train_probs_np = _run_epoch(model, train_loader, criterion, DEVICE, optimizer=optimizer)
+        train_loss, train_labels_np, train_probs_np = _run_epoch(model, train_loader, criterion, device, optimizer=optimizer)
         train_metrics = _compute_metrics(train_labels_np, train_probs_np, threshold=0.5)
 
-        val_loss, val_labels_np, val_probs_np = _run_epoch(model, val_loader, criterion, DEVICE, optimizer=None)
+        val_loss, val_labels_np, val_probs_np = _run_epoch(model, val_loader, criterion, device, optimizer=None)
         val_threshold, val_metrics = _find_best_threshold(val_labels_np, val_probs_np)
         val_score = val_metrics["balanced_accuracy"]
         scheduler.step(val_loss)
@@ -409,12 +414,12 @@ def train_cnn(
             LOGGER.info("Early stopping at epoch %d", epoch)
             break
 
-    ckpt = torch.load(output_path, map_location=DEVICE)
-    model = build_cnn_model(model_name=ckpt["model_name"], pretrained=False, freeze_backbone=False).to(DEVICE)
+    ckpt = torch.load(output_path, map_location=device)
+    model = build_cnn_model(model_name=ckpt["model_name"], pretrained=False, freeze_backbone=False).to(device)
     model.load_state_dict(ckpt["model_state_dict"])
     best_threshold = float(ckpt.get("best_threshold", best_threshold))
 
-    test_loss, test_labels_np, test_probs_np = _run_epoch(model, test_loader, criterion, DEVICE, optimizer=None)
+    test_loss, test_labels_np, test_probs_np = _run_epoch(model, test_loader, criterion, device, optimizer=None)
     test_metrics = _compute_metrics(test_labels_np, test_probs_np, threshold=best_threshold)
 
     LOGGER.info(
@@ -433,6 +438,7 @@ def train_cnn(
             {
                 "model_name": model_name,
                 "image_size": image_size,
+                "device": device,
                 "best_threshold": best_threshold,
                 "best_val_balanced_accuracy": best_val_score,
                 "test_loss": test_loss,
@@ -467,6 +473,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--pretrained", action="store_true", help="Use ImageNet weights if available")
     parser.add_argument("--freeze-backbone", action="store_true", help="Freeze CNN backbone and train classifier head only")
     parser.add_argument("--train-sampler", type=str, default="weighted", choices=["weighted", "shuffle"])
+    parser.add_argument("--device", type=str, default=DEFAULT_DEVICE, choices=["cpu", "cuda"])
     return parser.parse_args()
 
 
@@ -489,9 +496,9 @@ def main() -> None:
         pretrained=args.pretrained,
         freeze_backbone=args.freeze_backbone,
         sampler_strategy=args.train_sampler,
+        device=args.device,
     )
 
 
 if __name__ == "__main__":
     main()
-

@@ -6,6 +6,7 @@ CONDA_ENV="thesis"
 WORKDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/.."
 LOG_DIR="$WORKDIR/logs"
 RUNS_CHECKPOINT_DIR="$WORKDIR/checkpoints/runs"
+RUNS_PROCESSED_DIR="$WORKDIR/data/processed/runs"
 REPORTS_DIR="$WORKDIR/checkpoints/reports"
 
 COMMAND="start"
@@ -38,6 +39,7 @@ CNN_MODEL="mobilenet_v3_small"
 CNN_BATCH_SIZE=64
 CNN_EPOCHS=20
 CNN_IMAGE_SIZE=112
+CNN_FRAMES_PER_VIDEO=8
 
 EXAMPLE_MODE=0
 
@@ -75,6 +77,7 @@ Options:
   --cnn-batch-size N
   --cnn-epochs N
   --cnn-image-size N
+  --cnn-frames-per-video N
   --session NAME
   --env NAME
   --example            Help-only smoke run in tmux
@@ -111,6 +114,7 @@ while [[ $# -gt 0 ]]; do
     --cnn-batch-size) CNN_BATCH_SIZE="$2"; shift 2 ;;
     --cnn-epochs) CNN_EPOCHS="$2"; shift 2 ;;
     --cnn-image-size) CNN_IMAGE_SIZE="$2"; shift 2 ;;
+    --cnn-frames-per-video) CNN_FRAMES_PER_VIDEO="$2"; shift 2 ;;
     --session) SESSION_NAME="$2"; shift 2 ;;
     --env) CONDA_ENV="$2"; shift 2 ;;
     --example) EXAMPLE_MODE=1; shift ;;
@@ -123,9 +127,10 @@ mkdir -p "$LOG_DIR" "$REPORTS_DIR"
 LATEST_LOG_LINK="$LOG_DIR/latest_train_all.log"
 
 start_session() {
-  local timestamp run_root run_log summary_json history_jsonl cmd
+  local timestamp run_root processed_run_root run_log summary_json history_jsonl cmd
   timestamp="$(date +%Y%m%d_%H%M%S)"
   run_root="$RUNS_CHECKPOINT_DIR/train_all_${RUN_ID_PREFIX}_${timestamp}"
+  processed_run_root="$RUNS_PROCESSED_DIR/train_all_${RUN_ID_PREFIX}_${timestamp}"
   run_log="$LOG_DIR/train_all_${RUN_ID_PREFIX}_${timestamp}.log"
   summary_json="$run_root/train_all_summary.json"
   history_jsonl="$REPORTS_DIR/train_all_history.jsonl"
@@ -147,8 +152,10 @@ RNN_BATCH_SIZE='$RNN_BATCH_SIZE' RNN_EPOCHS='$RNN_EPOCHS' RNN_PATIENCE='$RNN_PAT
 RNN_MIN_EPOCHS='$RNN_MIN_EPOCHS' RNN_TCN_BLOCKS='$RNN_TCN_BLOCKS' RNN_TCN_KERNEL_SIZE='$RNN_TCN_KERNEL_SIZE' \
 RNN_THRESHOLD_OBJECTIVE='$RNN_THRESHOLD_OBJECTIVE' RNN_LOSS='$RNN_LOSS' \
 CNN_MODEL='$CNN_MODEL' CNN_BATCH_SIZE='$CNN_BATCH_SIZE' CNN_EPOCHS='$CNN_EPOCHS' CNN_IMAGE_SIZE='$CNN_IMAGE_SIZE' \
+CNN_FRAMES_PER_VIDEO='$CNN_FRAMES_PER_VIDEO' \
 RUN_ROOT='$run_root' RUN_LOG='$run_log' SUMMARY_JSON='$summary_json' HISTORY_JSONL='$history_jsonl' \
 LATEST_LOG_LINK='$LATEST_LOG_LINK' RUNS_CHECKPOINT_DIR='$RUNS_CHECKPOINT_DIR' \
+RUN_PROCESSED_ROOT='$processed_run_root' \
 bash '$WORKDIR/scripts/train_all_runner.sh'"
 
   tmux new-session -d -s "$SESSION_NAME" "bash -lc \"$cmd\""

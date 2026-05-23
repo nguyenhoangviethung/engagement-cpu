@@ -8,3 +8,5 @@ AGENTS.md
 
 # Local environment
 .venv/
+
+*.jpg

@@ -30,14 +30,17 @@ CNN_MODEL="${CNN_MODEL:?}"
 CNN_BATCH_SIZE="${CNN_BATCH_SIZE:?}"
 CNN_EPOCHS="${CNN_EPOCHS:?}"
 CNN_IMAGE_SIZE="${CNN_IMAGE_SIZE:?}"
+CNN_FRAMES_PER_VIDEO="${CNN_FRAMES_PER_VIDEO:-8}"
 RUN_ROOT="${RUN_ROOT:?}"
 RUN_LOG="${RUN_LOG:?}"
 SUMMARY_JSON="${SUMMARY_JSON:?}"
 HISTORY_JSONL="${HISTORY_JSONL:?}"
 LATEST_LOG_LINK="${LATEST_LOG_LINK:?}"
 RUNS_CHECKPOINT_DIR="${RUNS_CHECKPOINT_DIR:?}"
+RUN_PROCESSED_ROOT="${RUN_PROCESSED_ROOT:-$WORKDIR/data/processed/runs/train_all_$RUN_ID_PREFIX}"
 
 mkdir -p "$RUN_ROOT"
+mkdir -p "$RUN_PROCESSED_ROOT"
 
 echo "=== train_all started at $(date) ===" | tee -a "$RUN_LOG"
 echo "run_root=$RUN_ROOT" | tee -a "$RUN_LOG"
@@ -117,7 +120,18 @@ results_jsonl="$RUN_ROOT/results.jsonl"
 : > "$results_jsonl"
 
 if [[ "$INCLUDE_CNN" == "1" ]]; then
-  [[ -f "$CNN_MANIFEST" ]] || { echo "[FATAL][CNN] manifest not found at $CNN_MANIFEST" | tee -a "$RUN_LOG"; exit 1; }
+  CNN_MANIFEST_EFFECTIVE="$CNN_MANIFEST"
+  if [[ ! -f "$CNN_MANIFEST_EFFECTIVE" ]]; then
+    CNN_MANIFEST_EFFECTIVE="$RUN_PROCESSED_ROOT/cnn_frame_manifest.csv"
+    cnn_frames_dir="$RUN_PROCESSED_ROOT/cnn_frames"
+    echo "[CNN] manifest not found; generating frame manifest at $CNN_MANIFEST_EFFECTIVE" | tee -a "$RUN_LOG"
+    "$WORKDIR/scripts/lib/run_python.sh" --env "$CONDA_ENV" --workdir "$WORKDIR" env PYTHONPATH="$WORKDIR/src" python -m engagement_daisee.rnn.preprocess_labels 2>&1 | tee -a "$RUN_LOG"
+    "$WORKDIR/scripts/lib/run_python.sh" --env "$CONDA_ENV" --workdir "$WORKDIR" env PYTHONPATH="$WORKDIR/src" python -u -m engagement_daisee.cnn.extract_frames$sample_flag \
+      --output-dir "$cnn_frames_dir" --manifest "$CNN_MANIFEST_EFFECTIVE" \
+      --frame-size "$CNN_IMAGE_SIZE" --frames-per-video "$CNN_FRAMES_PER_VIDEO" 2>&1 | tee -a "$RUN_LOG"
+  fi
+
+  [[ -f "$CNN_MANIFEST_EFFECTIVE" ]] || { echo "[FATAL][CNN] manifest not found at $CNN_MANIFEST_EFFECTIVE" | tee -a "$RUN_LOG"; exit 1; }
   rid="${RUN_ID_PREFIX}_cnn"
   out_dir="$RUN_ROOT/cnn"
   mkdir -p "$out_dir"
@@ -127,11 +141,11 @@ if [[ "$INCLUDE_CNN" == "1" ]]; then
 
   echo "[CNN] rid=$rid" | tee -a "$RUN_LOG"
   "$WORKDIR/scripts/lib/run_python.sh" --env "$CONDA_ENV" --workdir "$WORKDIR" env PYTHONPATH="$WORKDIR/src" python -m engagement_daisee.cnn.train$sample_flag \
-    --manifest "$CNN_MANIFEST" --output "$ckpt" --run-id "$rid" --model "$CNN_MODEL" \
-    --image-size "$CNN_IMAGE_SIZE" --batch-size "$CNN_BATCH_SIZE" --epochs "$CNN_EPOCHS" 2>&1 | tee -a "$RUN_LOG"
+    --manifest "$CNN_MANIFEST_EFFECTIVE" --output "$ckpt" --run-id "$rid" --model "$CNN_MODEL" \
+    --image-size "$CNN_IMAGE_SIZE" --batch-size "$CNN_BATCH_SIZE" --epochs "$CNN_EPOCHS" --device "$DEVICE" 2>&1 | tee -a "$RUN_LOG"
 
   "$WORKDIR/scripts/lib/run_python.sh" --env "$CONDA_ENV" --workdir "$WORKDIR" env PYTHONPATH="$WORKDIR/src" python -m engagement_daisee.cnn.evaluate \
-    --manifest "$CNN_MANIFEST" --checkpoint "$ckpt" --split test --batch-size 256 --output-json "$eval_json" 2>&1 | tee -a "$RUN_LOG"
+    --manifest "$CNN_MANIFEST_EFFECTIVE" --checkpoint "$ckpt" --split test --batch-size 256 --device "$DEVICE" --output-json "$eval_json" 2>&1 | tee -a "$RUN_LOG"
 
   "$WORKDIR/scripts/lib/run_python.sh" --env "$CONDA_ENV" --workdir "$WORKDIR" python - "$out_dir/engagement_cnn.json" "$eval_json" "$agg_json" "$rid" "$CNN_MODEL" <<'PY' | tee -a "$RUN_LOG" >> "$results_jsonl"
 import json, sys
