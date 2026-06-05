@@ -163,7 +163,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--manifest", type=Path, default=FEATURE_MANIFEST_CSV)
     parser.add_argument("--model", type=Path, required=True, help="Path to XGBoost/LightGBM model file")
     parser.add_argument("--split", type=str, default="test", choices=["train", "validation", "test"])
-    parser.add_argument("--feature-mode", type=str, default="tsfresh", choices=["basic", "tsfresh"])
+    parser.add_argument("--feature-mode", type=str, default="tsfresh", choices=["basic", "tsfresh", "copur"])
     parser.add_argument("--threshold", type=float, default=None, help="Override threshold")
     parser.add_argument(
         "--summary-json",

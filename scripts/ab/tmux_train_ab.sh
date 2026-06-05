@@ -6,7 +6,7 @@ CONDA_ENV="thesis"
 WORKDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 LOG_DIR="$WORKDIR/logs"
 RUNS_CHECKPOINT_DIR="$WORKDIR/checkpoints/runs"
-DEFAULT_MANIFEST="$WORKDIR/data/processed/runs/pipeline_2/feature_manifest.csv"
+DEFAULT_MANIFEST="$WORKDIR/data/processed/runs/baseline_pipeline_features/feature_manifest.csv"
 
 LOG_EVERY=1
 SAMPLE_MODE=0

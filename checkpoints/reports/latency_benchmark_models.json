@@ -1,0 +1,113 @@
+{
+  "threads": 2,
+  "warmup": 30,
+  "iters": 300,
+  "split": "test",
+  "note": "Model-side CPU latency only; video decoding and feature extraction are excluded.",
+  "samples": {
+    "rnn_sequence": "/home/bear/engagement-cpu/data/processed/runs/baseline_pipeline_features/features/5000441001_seg0000.npy",
+    "ml_sequence": "/home/bear/engagement-cpu/data/processed/runs/baseline_pipeline_features/features/5000441001_seg0000.npy",
+    "cnn_frame": "/home/bear/engagement-cpu/data/processed/runs/phase34_train_all_features/cnn_frames/test/5000441001/5000441001_f00000.jpg"
+  },
+  "rows": [
+    {
+      "model": "rnn_gru_final",
+      "family": "RNN",
+      "variant": "eager_fp32",
+      "input": "sequence:1x30x90",
+      "latency_ms_mean": 10.630357070002296,
+      "latency_ms_median": 10.5637195001691,
+      "latency_ms_p95": 11.355644000104803,
+      "latency_ms_min": 9.561908000023323,
+      "latency_ms_max": 15.709055999877819
+    },
+    {
+      "model": "rnn_gru_final",
+      "family": "RNN",
+      "variant": "torchscript_fp32",
+      "input": "sequence:1x30x90",
+      "latency_ms_mean": 10.443776560005062,
+      "latency_ms_median": 10.091348500054664,
+      "latency_ms_p95": 10.832117999825641,
+      "latency_ms_min": 9.33361700003843,
+      "latency_ms_max": 53.25206999987131
+    },
+    {
+      "model": "rnn_gru_final",
+      "family": "RNN",
+      "variant": "int8_dynamic",
+      "input": "sequence:1x30x90",
+      "latency_ms_mean": 8.82898744333867,
+      "latency_ms_median": 8.778259999985494,
+      "latency_ms_p95": 9.259982999992644,
+      "latency_ms_min": 8.03750700015371,
+      "latency_ms_max": 16.151738000189653
+    },
+    {
+      "model": "rnn_tcn_final",
+      "family": "RNN",
+      "variant": "eager_fp32",
+      "input": "sequence:1x30x90",
+      "latency_ms_mean": 8.029515006674805,
+      "latency_ms_median": 8.04585900004895,
+      "latency_ms_p95": 8.530803999974523,
+      "latency_ms_min": 7.1725630000401,
+      "latency_ms_max": 8.980687000075704
+    },
+    {
+      "model": "rnn_tcn_final",
+      "family": "RNN",
+      "variant": "torchscript_fp32",
+      "input": "sequence:1x30x90",
+      "latency_ms_mean": 7.0796967466678025,
+      "latency_ms_median": 7.079902499981472,
+      "latency_ms_p95": 7.6162299999396055,
+      "latency_ms_min": 6.198573000119723,
+      "latency_ms_max": 8.208860999957324
+    },
+    {
+      "model": "rnn_tcn_final",
+      "family": "RNN",
+      "variant": "int8_dynamic",
+      "input": "sequence:1x30x90",
+      "latency_ms_mean": 7.366017926659272,
+      "latency_ms_median": 7.323747499981437,
+      "latency_ms_p95": 8.181576999959361,
+      "latency_ms_min": 6.535514000006515,
+      "latency_ms_max": 9.322902000121758
+    },
+    {
+      "model": "xgboost_final",
+      "family": "ML",
+      "variant": "xgboost",
+      "input": "tabular:1x2161",
+      "latency_ms_mean": 0.5052469033353191,
+      "latency_ms_median": 0.4945460000271851,
+      "latency_ms_p95": 0.5638519999138225,
+      "latency_ms_min": 0.44610000009015494,
+      "latency_ms_max": 1.0914649999449466
+    },
+    {
+      "model": "cnn_efficientnet_b0",
+      "family": "CNN",
+      "variant": "eager_fp32",
+      "input": "image:1x3x224x224",
+      "latency_ms_mean": 56.979013456658926,
+      "latency_ms_median": 53.09530349995839,
+      "latency_ms_p95": 85.70379899992986,
+      "latency_ms_min": 46.41111599994474,
+      "latency_ms_max": 121.37461900010749
+    },
+    {
+      "model": "santoni_pca_svd_cnn_arch",
+      "family": "Paper CNN",
+      "variant": "eager_fp32_untrained_arch",
+      "input": "image:1x1x300x300",
+      "latency_ms_mean": 131.55952098333196,
+      "latency_ms_median": 125.76576499998282,
+      "latency_ms_p95": 174.79281400005675,
+      "latency_ms_min": 117.30572199985545,
+      "latency_ms_max": 265.12041099999806
+    }
+  ]
+}

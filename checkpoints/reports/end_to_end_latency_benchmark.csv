@@ -1,0 +1,4 @@
+pipeline,feature_backend,frames_processed,windows,end_to_end_mean_ms,feature_extract_mean_ms,model_infer_mean_ms,end_to_end_median_ms,end_to_end_p95_ms,video
+rnn_gru_final_int8,MediaPipe FaceMesh,300,10,8532.414721866795,8512.277583000165,20.137138866630266,7026.281998500281,12163.149026000156,/home/bear/engagement-cpu/data/raw/daisee/DAiSEE/DataSet/Test/500044/5000441001/5000441001.avi
+rnn_tcn_final_torchscript,MediaPipe FaceMesh,300,10,8530.604974233513,8512.277583000165,18.32739123334856,7023.0594745003145,12173.469293999915,/home/bear/engagement-cpu/data/raw/daisee/DAiSEE/DataSet/Test/500044/5000441001/5000441001.avi
+xgboost_final,MediaPipe FaceMesh,300,10,8527.535398866909,8512.277583000165,15.25781586674384,7021.2845690005,12162.89750399983,/home/bear/engagement-cpu/data/raw/daisee/DAiSEE/DataSet/Test/500044/5000441001/5000441001.avi

@@ -12,8 +12,8 @@ Repo hiện đã hỗ trợ đúng theo luồng đó.
 ## 2) Dữ liệu đang dùng
 
 Bạn đang dùng processed data tại:
-- `data/processed/runs/pipeline_2/feature_manifest.csv`
-- `data/processed/runs/pipeline_2/features/`
+- `data/processed/runs/baseline_pipeline_features/feature_manifest.csv`
+- `data/processed/runs/baseline_pipeline_features/features/`
 
 Với `rnn` và `ml`, có thể train/eval trực tiếp từ đây, không cần re-process.
 
@@ -36,7 +36,7 @@ Với `rnn` và `ml`, có thể train/eval trực tiếp từ đây, không cầ
 ```bash
 ./scripts/tmux_train_eval.sh rnn start \
   --session rnn_te_p2 \
-  --manifest data/processed/runs/pipeline_2/feature_manifest.csv \
+  --manifest data/processed/runs/baseline_pipeline_features/feature_manifest.csv \
   --run-id p2_tcn_01 \
   --model tcn \
   --device cuda \
@@ -48,7 +48,7 @@ Với `rnn` và `ml`, có thể train/eval trực tiếp từ đây, không cầ
 ```bash
 ./scripts/tmux_train_eval.sh ml start \
   --session ml_te_p2 \
-  --manifest data/processed/runs/pipeline_2/feature_manifest.csv \
+  --manifest data/processed/runs/baseline_pipeline_features/feature_manifest.csv \
   --run-id p2_ml_01 \
   --backend lightgbm \
   --feature-mode tsfresh \
@@ -90,8 +90,8 @@ Ví dụ chạy qua đêm:
 ./scripts/tmux_train_all.sh start \
   --session nightly_all \
   --run-id-prefix nightly_p2 \
-  --rnn-manifest data/processed/runs/pipeline_2/feature_manifest.csv \
-  --ml-manifest data/processed/runs/pipeline_2/feature_manifest.csv \
+  --rnn-manifest data/processed/runs/baseline_pipeline_features/feature_manifest.csv \
+  --ml-manifest data/processed/runs/baseline_pipeline_features/feature_manifest.csv \
   --device cuda
 ```
 

@@ -37,7 +37,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run inference for tree-based ML model on one sequence file.")
     parser.add_argument("--model", type=Path, required=True, help="Path to model file")
     parser.add_argument("--sequence", type=Path, required=True, help="Path to .npy sequence file")
-    parser.add_argument("--feature-mode", type=str, default="tsfresh", choices=["basic", "tsfresh"])
+    parser.add_argument("--feature-mode", type=str, default="tsfresh", choices=["basic", "tsfresh", "copur"])
     parser.add_argument("--threshold", type=float, default=None, help="Override threshold")
     parser.add_argument("--summary-json", type=Path, default=None, help="Optional summary json with selected_threshold")
     return parser.parse_args()

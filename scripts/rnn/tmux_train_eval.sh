@@ -10,7 +10,7 @@ REPORTS_DIR="$WORKDIR/checkpoints/reports"
 
 COMMAND="start"
 RUN_ID=""
-MANIFEST="$WORKDIR/data/processed/runs/pipeline_2/feature_manifest.csv"
+MANIFEST="$WORKDIR/data/processed/runs/baseline_pipeline_features/feature_manifest.csv"
 SAMPLE_MODE=0
 MODEL_NAME="gru"
 CPU_THREADS=2
@@ -19,6 +19,16 @@ USE_AMP=0
 LOG_EVERY=1
 SPLIT="test"
 BATCH_SIZE=128
+EPOCHS=40
+PATIENCE=10
+MIN_EPOCHS=12
+HIDDEN_SIZE=192
+NUM_LAYERS=3
+DROPOUT=0.25
+LR=3e-4
+WEIGHT_DECAY=1e-4
+SCHEDULER="plateau"
+FREEZE_FEATURE_EPOCHS=0
 THRESHOLD=""
 RESUME_FROM=""
 RESUME_LAST=0
@@ -34,13 +44,23 @@ Options:
   --manifest PATH
   --run-id ID
   --sample
-  --model NAME           gru|gru_basic|simple_gru|tcn|1dcnn|temporal_cnn|transformer|tiny_transformer
+  --model NAME           gru|hybrid_attn|gru_basic|bilstm|tcn|transformer|tiny_transformer
   --cpu-threads N
   --device NAME
   --amp
   --log-every N
   --split train|validation|test
   --batch-size N
+  --epochs N
+  --patience N
+  --min-epochs N
+  --hidden-size N
+  --num-layers N
+  --dropout V
+  --lr V
+  --weight-decay V
+  --scheduler plateau|cosine|none
+  --freeze-feature-epochs N
   --threshold V
   --resume-from PATH
   --resume-last
@@ -63,6 +83,16 @@ while [[ $# -gt 0 ]]; do
     --log-every) LOG_EVERY="$2"; shift 2 ;;
     --split) SPLIT="$2"; shift 2 ;;
     --batch-size) BATCH_SIZE="$2"; shift 2 ;;
+    --epochs) EPOCHS="$2"; shift 2 ;;
+    --patience) PATIENCE="$2"; shift 2 ;;
+    --min-epochs) MIN_EPOCHS="$2"; shift 2 ;;
+    --hidden-size) HIDDEN_SIZE="$2"; shift 2 ;;
+    --num-layers) NUM_LAYERS="$2"; shift 2 ;;
+    --dropout) DROPOUT="$2"; shift 2 ;;
+    --lr) LR="$2"; shift 2 ;;
+    --weight-decay) WEIGHT_DECAY="$2"; shift 2 ;;
+    --scheduler) SCHEDULER="$2"; shift 2 ;;
+    --freeze-feature-epochs) FREEZE_FEATURE_EPOCHS="$2"; shift 2 ;;
     --threshold) THRESHOLD="$2"; shift 2 ;;
     --resume-from) RESUME_FROM="$2"; shift 2 ;;
     --resume-last) RESUME_LAST=1; shift ;;
@@ -85,8 +115,9 @@ build_command() {
   fi
 
   local run_dir="$RUNS_CHECKPOINT_DIR/rnn_train_eval_$active_run_id"
-  local checkpoint="$run_dir/engagement_gru.pt"
-  local train_summary="$run_dir/engagement_gru.json"
+  local safe_model_name="${MODEL_NAME//[^A-Za-z0-9_]/_}"
+  local checkpoint="$run_dir/engagement_${safe_model_name}.pt"
+  local train_summary="$run_dir/engagement_${safe_model_name}.json"
   local eval_json="$run_dir/eval_${SPLIT}.json"
   local aggregate_json="$run_dir/train_eval_summary.json"
   local history_jsonl="$REPORTS_DIR/rnn_train_eval_history.jsonl"
@@ -102,7 +133,7 @@ build_command() {
   [[ -n "$THRESHOLD" ]] && threshold_flag=" --threshold $THRESHOLD"
 
   local resume_flag=""
-  local last_ckpt="$run_dir/engagement_gru.last.pt"
+  local last_ckpt="$run_dir/engagement_${safe_model_name}.last.pt"
   if [[ -n "$RESUME_FROM" ]]; then
     resume_flag=" --resume-from \"$RESUME_FROM\""
   elif [[ "$RESUME_LAST" -eq 1 && -f "$last_ckpt" ]]; then
@@ -141,6 +172,17 @@ echo "Checkpoint: $checkpoint" | tee -a "$run_log"
   --model "$MODEL_NAME" \
   --cpu-threads "$CPU_THREADS" \
   --device "$DEVICE" \
+  --hidden-size "$HIDDEN_SIZE" \
+  --num-layers "$NUM_LAYERS" \
+  --dropout "$DROPOUT" \
+  --batch-size "$BATCH_SIZE" \
+  --epochs "$EPOCHS" \
+  --patience "$PATIENCE" \
+  --min-epochs "$MIN_EPOCHS" \
+  --lr "$LR" \
+  --weight-decay "$WEIGHT_DECAY" \
+  --scheduler "$SCHEDULER" \
+  --freeze-feature-epochs "$FREEZE_FEATURE_EPOCHS" \
   --log-every "$LOG_EVERY"$resume_flag 2>&1 | tee -a "$run_log"
 
 "$WORKDIR/scripts/lib/run_python.sh" --env "$CONDA_ENV" --workdir "$WORKDIR" env PYTHONPATH="$WORKDIR/src" python -m engagement_daisee.rnn.evaluate \

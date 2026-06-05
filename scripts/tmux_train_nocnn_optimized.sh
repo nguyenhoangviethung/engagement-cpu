@@ -37,6 +37,7 @@ EXTRACT_FRAME_STRIDE=1
 EXTRACT_MAX_FRAMES=120
 EXTRACT_RESIZE_WIDTH=320
 EXTRACT_FEATURE_SET="enhanced"
+EXTRACT_TEMPORAL_ENRICHMENT="velocity_std"
 EVAL_AGGREGATION="video"
 
 usage() {
@@ -62,7 +63,8 @@ Options:
   --extract-max-frames N      Uniform frames/video for RNN/ML features
   --extract-resize-width N    Resize width before MediaPipe
   --extract-frame-stride N
-  --extract-feature-set base|enhanced
+  --extract-feature-set base|enhanced|dense709
+  --extract-temporal-enrichment none|velocity_std
   --help
 USAGE
 }
@@ -84,6 +86,7 @@ while [[ $# -gt 0 ]]; do
     --extract-resize-width) EXTRACT_RESIZE_WIDTH="$2"; shift 2 ;;
     --extract-frame-stride) EXTRACT_FRAME_STRIDE="$2"; shift 2 ;;
     --extract-feature-set) EXTRACT_FEATURE_SET="$2"; shift 2 ;;
+    --extract-temporal-enrichment) EXTRACT_TEMPORAL_ENRICHMENT="$2"; shift 2 ;;
     --help|-h) usage; exit 0 ;;
     *) echo "Unknown argument: $1"; usage; exit 1 ;;
   esac
@@ -127,7 +130,7 @@ mkdir -p $(shell_quote "$features_dir") $(shell_quote "$run_root")
 $(shell_quote "$WORKDIR/scripts/lib/run_python.sh") --env $(shell_quote "$CONDA_ENV") --workdir $(shell_quote "$WORKDIR") env PYTHONPATH=$(shell_quote "$WORKDIR/src") python -u -m engagement_daisee.rnn.extract_features \
   --features-dir $(shell_quote "$features_dir") --manifest $(shell_quote "$manifest") --log-every $(shell_quote "$EXTRACT_LOG_EVERY") \
   --frame-stride $(shell_quote "$EXTRACT_FRAME_STRIDE") --max-frames $(shell_quote "$EXTRACT_MAX_FRAMES") --resize-width $(shell_quote "$EXTRACT_RESIZE_WIDTH") \
-  --feature-set $(shell_quote "$EXTRACT_FEATURE_SET") 2>&1 | tee -a $(shell_quote "$run_log")
+  --feature-set $(shell_quote "$EXTRACT_FEATURE_SET") --temporal-enrichment $(shell_quote "$EXTRACT_TEMPORAL_ENRICHMENT") 2>&1 | tee -a $(shell_quote "$run_log")
 echo "[3/3] train_all_runner.sh without CNN" | tee -a $(shell_quote "$run_log")
 WORKDIR=$(shell_quote "$WORKDIR") CONDA_ENV=$(shell_quote "$CONDA_ENV") RUN_ID_PREFIX=$(shell_quote "$RUN_ID_PREFIX") \
 RNN_MANIFEST=$(shell_quote "$manifest") ML_MANIFEST=$(shell_quote "$manifest") CNN_MANIFEST='' RNN_MODELS=$(shell_quote "$RNN_MODELS") \

@@ -1,5 +1,5 @@
 {
-  "manifest": "/home/bear/engagement-cpu/scripts/../data/processed/runs/train_all_phase34_20260523_030236/cnn_frame_manifest.csv",
+  "manifest": "/home/bear/engagement-cpu/scripts/../data/processed/runs/phase34_train_all_features/cnn_frame_manifest.csv",
   "checkpoint": "/home/bear/engagement-cpu/scripts/../checkpoints/runs/train_all_phase34_20260523_030236/cnn/engagement_cnn.pt",
   "split": "test",
   "rows": 14241,

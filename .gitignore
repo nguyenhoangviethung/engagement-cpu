@@ -1,6 +1,9 @@
-logs/
+# logs/
+checkpoint/runs/
+data/
 data/raw/
-# checkpoints/
+data/processed/
+external/
 __pycache__/
 *.log
 .vscode/
@@ -10,3 +13,5 @@ AGENTS.md
 .venv/
 
 *.jpg
+.env
+external/mediapipe/*.task

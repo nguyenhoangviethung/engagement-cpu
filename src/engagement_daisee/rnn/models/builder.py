@@ -1,5 +1,8 @@
 from engagement_daisee.common.config import FEATURE_DIM
 from engagement_daisee.rnn.models.gru import BasicGRUClassifier, EngagementGRU
+from engagement_daisee.rnn.models.hybrid import EngagementHybridAttention
+from engagement_daisee.rnn.models.lstm import EngagementBiLSTM
+from engagement_daisee.rnn.models.stgcn import EngagementSTGCN
 from engagement_daisee.rnn.models.tcn import EngagementTCN
 from engagement_daisee.rnn.models.transformer import EngagementTinyTransformer
 
@@ -36,6 +39,14 @@ def build_sequence_model(
             dropout=dropout,
         )
 
+    if name in {"bilstm", "bi_lstm", "copur_bilstm"}:
+        return EngagementBiLSTM(
+            input_size=input_size,
+            hidden_size=hidden_size,
+            num_layers=max(1, num_layers),
+            dropout=dropout,
+        )
+
     if name in {"tcn", "1dcnn", "temporal_cnn"}:
         return EngagementTCN(
             input_size=input_size,
@@ -43,6 +54,24 @@ def build_sequence_model(
             dropout=dropout,
             kernel_size=kernel_size,
             num_blocks=tcn_blocks,
+        )
+
+    if name in {"stgcn", "st-gcn", "graph_tcn"}:
+        return EngagementSTGCN(
+            input_size=input_size,
+            hidden_size=hidden_size,
+            dropout=dropout,
+            num_blocks=tcn_blocks,
+        )
+
+    if name in {"hybrid", "hybrid_attn", "tcn_gru_attn", "multiscale_gru_attn"}:
+        return EngagementHybridAttention(
+            input_size=input_size,
+            hidden_size=hidden_size,
+            num_layers=max(1, num_layers),
+            dropout=dropout,
+            num_heads=num_heads,
+            max_seq_len=max_seq_len,
         )
 
     if name in {"transformer", "tiny_transformer"}:
@@ -58,5 +87,7 @@ def build_sequence_model(
     raise ValueError(
         "Unsupported model_name: "
         f"{model_name}. Expected one of: gru, gru_basic|simple_gru, "
-        "tcn|1dcnn|temporal_cnn, transformer|tiny_transformer"
+        "bilstm|bi_lstm|copur_bilstm, tcn|1dcnn|temporal_cnn, "
+        "stgcn|st-gcn|graph_tcn, hybrid_attn|tcn_gru_attn, "
+        "transformer|tiny_transformer"
     )
