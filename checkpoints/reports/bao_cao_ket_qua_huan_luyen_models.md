@@ -19,25 +19,25 @@
 
 | Rank | Milestone | Model | Balanced Acc | Accuracy | F1 Macro | Threshold | Checkpoint |
 | ---: | :--- | :--- | ---: | ---: | ---: | ---: | :--- |
-| 1 | final | gru | 77.35% | 71.97% | 71.22% | 0.63 | [engagement_gru.pt](/home/bear/engagement-cpu/checkpoints/runs/train_all_train_all_20260529_170448/rnn_gru/engagement_gru.pt) |
-| 2 | final | tcn | 72.52% | 69.67% | 68.30% | 0.61 | [engagement_tcn.pt](/home/bear/engagement-cpu/checkpoints/runs/train_all_train_all_20260529_170448/rnn_tcn/engagement_tcn.pt) |
-| 3 | final | gru_basic | 70.66% | 64.18% | 63.77% | 0.61 | [engagement_gru_basic.pt](/home/bear/engagement-cpu/checkpoints/runs/train_all_train_all_20260529_170448/rnn_gru_basic/engagement_gru_basic.pt) |
-| 4 | final | xgboost | 69.34% | 70.52% | - | 0.49 | [engagement_xgb.json](/home/bear/engagement-cpu/checkpoints/runs/trainml_train_all_ml/engagement_xgb.json) |
-| 5 | final | tiny_transformer | 64.74% | 67.54% | 63.75% | 0.55 | [engagement_tiny_transformer.pt](/home/bear/engagement-cpu/checkpoints/runs/train_all_train_all_20260529_170448/rnn_tiny_transformer/engagement_tiny_transformer.pt) |
-| 6 | phase12 | xgboost | 59.08% | 61.32% | - | 0.49 | [engagement_xgb.json](/home/bear/engagement-cpu/checkpoints/runs/trainml_phase12_ml/engagement_xgb.json) |
-| 7 | openface_pca160 | xgboost | 58.92% | 61.29% | - | 0.47 | [engagement_xgb.json](/home/bear/engagement-cpu/checkpoints/runs/trainml_openface709_safe_train_20260525_ml_pca160_tsfresh/engagement_xgb.json) |
-| 8 | phase34_nocnn | xgboost | 58.37% | 62.89% | - | 0.49 | [engagement_xgb.json](/home/bear/engagement-cpu/checkpoints/runs/trainml_phase34_nocnn_train_ml/engagement_xgb.json) |
-| 9 | phase34_nocnn | tiny_transformer | 58.21% | 61.83% | 57.50% | 0.21 | [engagement_tiny_transformer.pt](/home/bear/engagement-cpu/checkpoints/runs/train_all_phase34_nocnn_train_20260523_163113/rnn_tiny_transformer/engagement_tiny_transformer.pt) |
-| 10 | phase34_nocnn | tcn | 57.95% | 51.51% | 51.34% | 0.46 | [engagement_tcn.pt](/home/bear/engagement-cpu/checkpoints/runs/train_all_phase34_nocnn_train_20260523_163113/rnn_tcn/engagement_tcn.pt) |
-| 11 | phase34_nocnn | gru | 57.29% | 56.28% | 54.53% | 0.29 | [engagement_gru.pt](/home/bear/engagement-cpu/checkpoints/runs/train_all_phase34_nocnn_train_20260523_163113/rnn_gru/engagement_gru.pt) |
-| 12 | phase12 | gru_basic | 55.99% | 63.79% | 56.12% | 0.17 | [engagement_gru_basic.pt](/home/bear/engagement-cpu/checkpoints/runs/train_all_phase12_20260523_011612/rnn_gru_basic/engagement_gru_basic.pt) |
-| 13 | baseline_bilstm | bilstm | 55.87% | 50.67% | 50.33% | 0.39 | [engagement_bilstm.pt](/home/bear/engagement-cpu/checkpoints/runs/rnn_train_eval_rnn_bilstm_copur/engagement_bilstm.pt) |
-| 14 | phase34_nocnn | gru_basic | 55.83% | 65.70% | 55.92% | 0.14 | [engagement_gru_basic.pt](/home/bear/engagement-cpu/checkpoints/runs/train_all_phase34_nocnn_train_20260523_163113/rnn_gru_basic/engagement_gru_basic.pt) |
-| 15 | phase12 | tiny_transformer | 55.40% | 54.65% | 52.85% | 0.31 | [engagement_tiny_transformer.pt](/home/bear/engagement-cpu/checkpoints/runs/train_all_phase12_20260523_011612/rnn_tiny_transformer/engagement_tiny_transformer.pt) |
-| 16 | phase12 | gru | 55.01% | 50.06% | 49.69% | 0.32 | [engagement_gru.pt](/home/bear/engagement-cpu/checkpoints/runs/train_all_phase12_20260523_011612/rnn_gru/engagement_gru.pt) |
-| 17 | phase12 | tcn | 54.28% | 64.18% | 54.26% | 0.15 | [engagement_tcn.pt](/home/bear/engagement-cpu/checkpoints/runs/train_all_phase12_20260523_011612/rnn_tcn/engagement_tcn.pt) |
-| 18 | cnn_best | efficientnet_b0 | 53.09% | 70.91% | 47.80% | 0.19 | [engagement_cnn.pt](/home/bear/engagement-cpu/checkpoints/runs/train_all_phase34_20260523_030236/cnn/engagement_cnn.pt) |
-| 19 | phase12 | mobilenet_v3_small | 50.50% | 68.67% | 43.92% | 0.11 | [engagement_cnn.pt](/home/bear/engagement-cpu/checkpoints/runs/train_all_phase12_20260523_011612/cnn/engagement_cnn.pt) |
+| 1 | final | gru | 77.35% | 71.97% | 71.22% | 0.63 | [engagement_gru.pt](../runs/train_all_train_all_20260529_170448/rnn_gru/engagement_gru.pt) |
+| 2 | final | tcn | 72.52% | 69.67% | 68.30% | 0.61 | [engagement_tcn.pt](../runs/train_all_train_all_20260529_170448/rnn_tcn/engagement_tcn.pt) |
+| 3 | final | gru_basic | 70.66% | 64.18% | 63.77% | 0.61 | [engagement_gru_basic.pt](../runs/train_all_train_all_20260529_170448/rnn_gru_basic/engagement_gru_basic.pt) |
+| 4 | final | xgboost | 69.34% | 70.52% | - | 0.49 | [engagement_xgb.json](../runs/trainml_train_all_ml/engagement_xgb.json) |
+| 5 | final | tiny_transformer | 64.74% | 67.54% | 63.75% | 0.55 | [engagement_tiny_transformer.pt](../runs/train_all_train_all_20260529_170448/rnn_tiny_transformer/engagement_tiny_transformer.pt) |
+| 6 | phase12 | xgboost | 59.08% | 61.32% | - | 0.49 | [engagement_xgb.json](../runs/trainml_phase12_ml/engagement_xgb.json) |
+| 7 | openface_pca160 | xgboost | 58.92% | 61.29% | - | 0.47 | [engagement_xgb.json](../runs/trainml_openface709_safe_train_20260525_ml_pca160_tsfresh/engagement_xgb.json) |
+| 8 | phase34_nocnn | xgboost | 58.37% | 62.89% | - | 0.49 | [engagement_xgb.json](../runs/trainml_phase34_nocnn_train_ml/engagement_xgb.json) |
+| 9 | phase34_nocnn | tiny_transformer | 58.21% | 61.83% | 57.50% | 0.21 | [engagement_tiny_transformer.pt](../runs/train_all_phase34_nocnn_train_20260523_163113/rnn_tiny_transformer/engagement_tiny_transformer.pt) |
+| 10 | phase34_nocnn | tcn | 57.95% | 51.51% | 51.34% | 0.46 | [engagement_tcn.pt](../runs/train_all_phase34_nocnn_train_20260523_163113/rnn_tcn/engagement_tcn.pt) |
+| 11 | phase34_nocnn | gru | 57.29% | 56.28% | 54.53% | 0.29 | [engagement_gru.pt](../runs/train_all_phase34_nocnn_train_20260523_163113/rnn_gru/engagement_gru.pt) |
+| 12 | phase12 | gru_basic | 55.99% | 63.79% | 56.12% | 0.17 | [engagement_gru_basic.pt](../runs/train_all_phase12_20260523_011612/rnn_gru_basic/engagement_gru_basic.pt) |
+| 13 | baseline_bilstm | bilstm | 55.87% | 50.67% | 50.33% | 0.39 | [engagement_bilstm.pt](../runs/rnn_train_eval_rnn_bilstm_copur/engagement_bilstm.pt) |
+| 14 | phase34_nocnn | gru_basic | 55.83% | 65.70% | 55.92% | 0.14 | [engagement_gru_basic.pt](../runs/train_all_phase34_nocnn_train_20260523_163113/rnn_gru_basic/engagement_gru_basic.pt) |
+| 15 | phase12 | tiny_transformer | 55.40% | 54.65% | 52.85% | 0.31 | [engagement_tiny_transformer.pt](../runs/train_all_phase12_20260523_011612/rnn_tiny_transformer/engagement_tiny_transformer.pt) |
+| 16 | phase12 | gru | 55.01% | 50.06% | 49.69% | 0.32 | [engagement_gru.pt](../runs/train_all_phase12_20260523_011612/rnn_gru/engagement_gru.pt) |
+| 17 | phase12 | tcn | 54.28% | 64.18% | 54.26% | 0.15 | [engagement_tcn.pt](../runs/train_all_phase12_20260523_011612/rnn_tcn/engagement_tcn.pt) |
+| 18 | cnn_best | efficientnet_b0 | 53.09% | 70.91% | 47.80% | 0.19 | [engagement_cnn.pt](../runs/train_all_phase34_20260523_030236/cnn/engagement_cnn.pt) |
+| 19 | phase12 | mobilenet_v3_small | 50.50% | 68.67% | 43.92% | 0.11 | [engagement_cnn.pt](../runs/train_all_phase12_20260523_011612/cnn/engagement_cnn.pt) |
 
 ## 3. Kết quả final run
 
@@ -45,11 +45,11 @@ Bảng này lấy từ milestone `final` trong `selected_model_performance.csv`,
 
 | Model | Nhóm | Val Balanced Acc | Test Balanced Acc | Test Accuracy | Test F1 Macro | E2E latency/video | Model-side latency | Test Loss | Threshold | Checkpoint |
 | :--- | :---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | :--- |
-| gru | RNN | 61.00% | 77.35% | 71.97% | 71.22% | 8.53 s | 8.83 ms | 0.341 | 0.63 | [engagement_gru.pt](/home/bear/engagement-cpu/checkpoints/runs/train_all_train_all_20260529_170448/rnn_gru/engagement_gru.pt) |
-| tcn | RNN | 60.53% | 72.52% | 69.67% | 68.30% | 8.53 s | 7.08 ms | 0.361 | 0.61 | [engagement_tcn.pt](/home/bear/engagement-cpu/checkpoints/runs/train_all_train_all_20260529_170448/rnn_tcn/engagement_tcn.pt) |
-| gru_basic | RNN | 59.41% | 70.66% | 64.18% | 63.77% | - | - | 0.401 | 0.61 | [engagement_gru_basic.pt](/home/bear/engagement-cpu/checkpoints/runs/train_all_train_all_20260529_170448/rnn_gru_basic/engagement_gru_basic.pt) |
-| xgboost | ML | 61.36% | 69.34% | 70.52% | - | 8.53 s | 0.51 ms | - | 0.49 | [engagement_xgb.json](/home/bear/engagement-cpu/checkpoints/runs/trainml_train_all_ml/engagement_xgb.json) |
-| tiny_transformer | RNN | 58.51% | 64.74% | 67.54% | 63.75% | - | - | 0.417 | 0.55 | [engagement_tiny_transformer.pt](/home/bear/engagement-cpu/checkpoints/runs/train_all_train_all_20260529_170448/rnn_tiny_transformer/engagement_tiny_transformer.pt) |
+| gru | RNN | 61.00% | 77.35% | 71.97% | 71.22% | 8.53 s | 8.83 ms | 0.341 | 0.63 | [engagement_gru.pt](../runs/train_all_train_all_20260529_170448/rnn_gru/engagement_gru.pt) |
+| tcn | RNN | 60.53% | 72.52% | 69.67% | 68.30% | 8.53 s | 7.08 ms | 0.361 | 0.61 | [engagement_tcn.pt](../runs/train_all_train_all_20260529_170448/rnn_tcn/engagement_tcn.pt) |
+| gru_basic | RNN | 59.41% | 70.66% | 64.18% | 63.77% | - | - | 0.401 | 0.61 | [engagement_gru_basic.pt](../runs/train_all_train_all_20260529_170448/rnn_gru_basic/engagement_gru_basic.pt) |
+| xgboost | ML | 61.36% | 69.34% | 70.52% | - | 8.53 s | 0.51 ms | - | 0.49 | [engagement_xgb.json](../runs/trainml_train_all_ml/engagement_xgb.json) |
+| tiny_transformer | RNN | 58.51% | 64.74% | 67.54% | 63.75% | - | - | 0.417 | 0.55 | [engagement_tiny_transformer.pt](../runs/train_all_train_all_20260529_170448/rnn_tiny_transformer/engagement_tiny_transformer.pt) |
 
 ## 4. Latency benchmark
 
@@ -108,8 +108,8 @@ CNN có Accuracy khá cao nhưng Balanced Accuracy thấp hơn do recall negativ
 
 | Milestone | Run ID | Model | Val Balanced Acc | Test Balanced Acc | Test Accuracy | F1 Macro | E2E latency/video | Model-side latency | Threshold | Checkpoint |
 | :--- | :--- | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | :--- |
-| cnn_best | phase34_cnn | efficientnet_b0 | 64.11% | 53.09% | 70.91% | 47.80% | Chưa đo | 56.98 ms | 0.19 | [engagement_cnn.pt](/home/bear/engagement-cpu/checkpoints/runs/train_all_phase34_20260523_030236/cnn/engagement_cnn.pt) |
-| phase12 | phase12_cnn | mobilenet_v3_small | 57.35% | 50.50% | 68.67% | 43.92% | - | - | 0.11 | [engagement_cnn.pt](/home/bear/engagement-cpu/checkpoints/runs/train_all_phase12_20260523_011612/cnn/engagement_cnn.pt) |
+| cnn_best | phase34_cnn | efficientnet_b0 | 64.11% | 53.09% | 70.91% | 47.80% | Chưa đo | 56.98 ms | 0.19 | [engagement_cnn.pt](../runs/train_all_phase34_20260523_030236/cnn/engagement_cnn.pt) |
+| phase12 | phase12_cnn | mobilenet_v3_small | 57.35% | 50.50% | 68.67% | 43.92% | - | - | 0.11 | [engagement_cnn.pt](../runs/train_all_phase12_20260523_011612/cnn/engagement_cnn.pt) |
 
 ## 7. So sánh với SOTA/paper benchmark
 
@@ -164,13 +164,13 @@ Các run PCA ngày `2026-06-01` dùng bộ feature OpenFace/manifest709 sau khi 
 
 | PCA dim | Best model | Nhóm | Val Balanced Acc | Test Balanced Acc | Test Accuracy | Test F1 Macro | Threshold | Checkpoint |
 | ---: | :--- | :---: | ---: | ---: | ---: | ---: | ---: | :--- |
-| 128 | tiny_transformer | RNN | 58.20% | 51.46% | 49.82% | 48.54% | 0.50 | [engagement_tiny_transformer.pt](/home/bear/engagement-cpu/checkpoints/runs/train_all_pca128_20260601_095609/rnn_tiny_transformer/engagement_tiny_transformer.pt) |
-| 160 | gru | RNN | 57.71% | 51.94% | 42.46% | 42.35% | 0.68 | [engagement_gru.pt](/home/bear/engagement-cpu/checkpoints/runs/train_all_pca160_20260601_101009/rnn_gru/engagement_gru.pt) |
-| 192 | tcn | RNN | 56.75% | 52.17% | 47.51% | 47.15% | 0.69 | [engagement_tcn.pt](/home/bear/engagement-cpu/checkpoints/runs/train_all_pca192_20260601_102540/rnn_tcn/engagement_tcn.pt) |
-| 224 | tiny_transformer | RNN | 57.49% | 54.75% | 49.85% | 49.47% | 0.88 | [engagement_tiny_transformer.pt](/home/bear/engagement-cpu/checkpoints/runs/train_all_pca224_20260601_104210/rnn_tiny_transformer/engagement_tiny_transformer.pt) |
-| 256 | gru_basic | RNN | 57.70% | 54.58% | 44.90% | 44.82% | 0.72 | [engagement_gru_basic.pt](/home/bear/engagement-cpu/checkpoints/runs/train_all_pca256_20260601_110040/rnn_gru_basic/engagement_gru_basic.pt) |
-| 300 | gru | RNN | 57.11% | 54.26% | 46.95% | 46.92% | 0.82 | [engagement_gru.pt](/home/bear/engagement-cpu/checkpoints/runs/train_all_pca300_20260601_112041/rnn_gru/engagement_gru.pt) |
-| 384 | tiny_transformer | RNN | 55.20% | 56.98% | 47.49% | 47.46% | 0.82 | [engagement_tiny_transformer.pt](/home/bear/engagement-cpu/checkpoints/runs/train_all_pca384_20260601_114342/rnn_tiny_transformer/engagement_tiny_transformer.pt) |
+| 128 | tiny_transformer | RNN | 58.20% | 51.46% | 49.82% | 48.54% | 0.50 | [engagement_tiny_transformer.pt](../runs/train_all_pca128_20260601_095609/rnn_tiny_transformer/engagement_tiny_transformer.pt) |
+| 160 | gru | RNN | 57.71% | 51.94% | 42.46% | 42.35% | 0.68 | [engagement_gru.pt](../runs/train_all_pca160_20260601_101009/rnn_gru/engagement_gru.pt) |
+| 192 | tcn | RNN | 56.75% | 52.17% | 47.51% | 47.15% | 0.69 | [engagement_tcn.pt](../runs/train_all_pca192_20260601_102540/rnn_tcn/engagement_tcn.pt) |
+| 224 | tiny_transformer | RNN | 57.49% | 54.75% | 49.85% | 49.47% | 0.88 | [engagement_tiny_transformer.pt](../runs/train_all_pca224_20260601_104210/rnn_tiny_transformer/engagement_tiny_transformer.pt) |
+| 256 | gru_basic | RNN | 57.70% | 54.58% | 44.90% | 44.82% | 0.72 | [engagement_gru_basic.pt](../runs/train_all_pca256_20260601_110040/rnn_gru_basic/engagement_gru_basic.pt) |
+| 300 | gru | RNN | 57.11% | 54.26% | 46.95% | 46.92% | 0.82 | [engagement_gru.pt](../runs/train_all_pca300_20260601_112041/rnn_gru/engagement_gru.pt) |
+| 384 | tiny_transformer | RNN | 55.20% | 56.98% | 47.49% | 47.46% | 0.82 | [engagement_tiny_transformer.pt](../runs/train_all_pca384_20260601_114342/rnn_tiny_transformer/engagement_tiny_transformer.pt) |
 
 ## 10. PCA sweep riêng cho XGBoost
 
@@ -178,13 +178,13 @@ XGBoost PCA có validation khá ổn định quanh 62-63% Balanced Accuracy, nh�
 
 | PCA dim | Rows | Threshold | Val Balanced Acc | Test Balanced Acc | Test Accuracy | F1 Pos | Recall Neg | Recall Pos | Checkpoint |
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | :--- |
-| 128 | 34,284 | 0.47 | 62.40% | 52.94% | 55.34% | 64.76% | 46.75% | 59.13% | [engagement_xgb.json](/home/bear/engagement-cpu/checkpoints/runs/trainml_pca128_ml/engagement_xgb.json) |
-| 160 | 34,284 | 0.49 | 62.71% | 53.66% | 54.25% | 62.60% | 52.15% | 55.17% | [engagement_xgb.json](/home/bear/engagement-cpu/checkpoints/runs/trainml_pca160_ml/engagement_xgb.json) |
-| 192 | 34,284 | 0.47 | 63.03% | 53.70% | 56.71% | 66.34% | 45.92% | 61.47% | [engagement_xgb.json](/home/bear/engagement-cpu/checkpoints/runs/trainml_pca192_ml/engagement_xgb.json) |
-| 224 | 34,284 | 0.49 | 62.49% | 53.08% | 54.06% | 62.69% | 50.55% | 55.61% | [engagement_xgb.json](/home/bear/engagement-cpu/checkpoints/runs/trainml_pca224_ml/engagement_xgb.json) |
-| 256 | 34,284 | 0.45 | 62.99% | 52.72% | 57.61% | 68.14% | 40.11% | 65.33% | [engagement_xgb.json](/home/bear/engagement-cpu/checkpoints/runs/trainml_pca256_ml/engagement_xgb.json) |
-| 300 | 34,284 | 0.43 | 62.64% | 51.76% | 57.93% | 69.06% | 35.85% | 67.67% | [engagement_xgb.json](/home/bear/engagement-cpu/checkpoints/runs/trainml_pca300_ml/engagement_xgb.json) |
-| 384 | 34,284 | 0.43 | 62.40% | 51.38% | 59.11% | 70.76% | 31.46% | 71.30% | [engagement_xgb.json](/home/bear/engagement-cpu/checkpoints/runs/trainml_pca384_ml/engagement_xgb.json) |
+| 128 | 34,284 | 0.47 | 62.40% | 52.94% | 55.34% | 64.76% | 46.75% | 59.13% | [engagement_xgb.json](../runs/trainml_pca128_ml/engagement_xgb.json) |
+| 160 | 34,284 | 0.49 | 62.71% | 53.66% | 54.25% | 62.60% | 52.15% | 55.17% | [engagement_xgb.json](../runs/trainml_pca160_ml/engagement_xgb.json) |
+| 192 | 34,284 | 0.47 | 63.03% | 53.70% | 56.71% | 66.34% | 45.92% | 61.47% | [engagement_xgb.json](../runs/trainml_pca192_ml/engagement_xgb.json) |
+| 224 | 34,284 | 0.49 | 62.49% | 53.08% | 54.06% | 62.69% | 50.55% | 55.61% | [engagement_xgb.json](../runs/trainml_pca224_ml/engagement_xgb.json) |
+| 256 | 34,284 | 0.45 | 62.99% | 52.72% | 57.61% | 68.14% | 40.11% | 65.33% | [engagement_xgb.json](../runs/trainml_pca256_ml/engagement_xgb.json) |
+| 300 | 34,284 | 0.43 | 62.64% | 51.76% | 57.93% | 69.06% | 35.85% | 67.67% | [engagement_xgb.json](../runs/trainml_pca300_ml/engagement_xgb.json) |
+| 384 | 34,284 | 0.43 | 62.40% | 51.38% | 59.11% | 70.76% | 31.46% | 71.30% | [engagement_xgb.json](../runs/trainml_pca384_ml/engagement_xgb.json) |
 
 ## 11. Chi tiết tất cả model RNN trong PCA sweep
 

@@ -27,8 +27,8 @@ Entry point infer hien tai trong repo khong nhan video tho truc tiep.
 
 Ca 2 nhanh `rnn` va `ml` deu nhan dau vao la file `sequence .npy`:
 
-- `rnn`: [src/engagement_daisee/rnn/infer.py](/home/bear/engagement-cpu/src/engagement_daisee/rnn/infer.py)
-- `ml`: [src/engagement_daisee/ml/infer.py](/home/bear/engagement-cpu/src/engagement_daisee/ml/infer.py)
+- `rnn`: [src/engagement_daisee/rnn/infer.py](../../src/engagement_daisee/rnn/infer.py)
+- `ml`: [src/engagement_daisee/ml/infer.py](../../src/engagement_daisee/ml/infer.py)
 
 Dieu nay co nghia la production pipeline can co 2 tang:
 
@@ -37,14 +37,14 @@ Dieu nay co nghia la production pipeline can co 2 tang:
 
 Neu muon pipeline online tu webcam/video:
 
-- MediaPipe feature extraction: [src/engagement_daisee/mediapipe/extract_features.py](/home/bear/engagement-cpu/src/engagement_daisee/mediapipe/extract_features.py)
-- RNN-style sequence extraction: [src/engagement_daisee/rnn/extract_features.py](/home/bear/engagement-cpu/src/engagement_daisee/rnn/extract_features.py)
+- MediaPipe feature extraction: [src/engagement_daisee/mediapipe/extract_features.py](../../src/engagement_daisee/mediapipe/extract_features.py)
+- RNN-style sequence extraction: [src/engagement_daisee/rnn/extract_features.py](../../src/engagement_daisee/rnn/extract_features.py)
 
 ## 3. Artifact can lay tu Hugging Face
 
 Tren HF, checkpoint dang duoc luu chu yeu duoi dang zip tung run, vi script upload dung `--zip-runs`:
 
-- [scripts/data/hf_push_data.sh](/home/bear/engagement-cpu/scripts/data/hf_push_data.sh:309)
+- [scripts/data/hf_push_data.sh](../../scripts/data/hf_push_data.sh:309)
 
 No zip toan bo noi dung cua moi run folder roi moi upload. Nghia la model weights, summary json, eval json, preprocess artifact... nam ben trong file zip cua run.
 
@@ -89,7 +89,7 @@ Buoc 2: convert checkpoint sang artifact deploy CPU
 
 Script convert:
 
-- [src/engagement_daisee/rnn/optimize_inference.py](/home/bear/engagement-cpu/src/engagement_daisee/rnn/optimize_inference.py)
+- [src/engagement_daisee/rnn/optimize_inference.py](../../src/engagement_daisee/rnn/optimize_inference.py)
 
 Script nay tao ra:
 
@@ -168,7 +168,7 @@ Neu muon chay infer bang script bao log/tmux thay vi goi module Python truc tiep
 
 ### RNN
 
-- [scripts/rnn/tmux_infer.sh](/home/bear/engagement-cpu/scripts/rnn/tmux_infer.sh)
+- [scripts/rnn/tmux_infer.sh](../../scripts/rnn/tmux_infer.sh)
 
 Vi du:
 
@@ -182,7 +182,7 @@ Vi du:
 
 ### ML
 
-- [scripts/ml/tmux_infer.sh](/home/bear/engagement-cpu/scripts/ml/tmux_infer.sh)
+- [scripts/ml/tmux_infer.sh](../../scripts/ml/tmux_infer.sh)
 
 Vi du:
 
@@ -226,8 +226,8 @@ Kieu shape hien tai:
 
 Repo co mot ung dung webcam realtime:
 
-- [src/engagement_daisee/app/focus_monitor.py](/home/bear/engagement-cpu/src/engagement_daisee/app/focus_monitor.py)
-- [scripts/app/run_focus_monitor_webcam.sh](/home/bear/engagement-cpu/scripts/app/run_focus_monitor_webcam.sh)
+- [src/engagement_daisee/app/focus_monitor.py](../../src/engagement_daisee/app/focus_monitor.py)
+- [scripts/app/run_focus_monitor_webcam.sh](../../scripts/app/run_focus_monitor_webcam.sh)
 
 Nhanh nay la heuristic multi-signal tren MediaPipe, khong phai chinh model DAiSEE final trong bao cao. No phu hop cho demo hoac prototype webcam, nhung khong nen xem la duong infer chuan cua `gru final` hoac `xgboost final`.
 
