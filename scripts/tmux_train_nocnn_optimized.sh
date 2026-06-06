@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SESSION_NAME="phase34_nocnn_opt"
+SESSION_NAME="feature_stage34_nocnn_opt"
 CONDA_ENV="thesis"
 WORKDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LOG_DIR="$WORKDIR/logs"
@@ -10,7 +10,7 @@ RUNS_CHECKPOINT_DIR="$WORKDIR/checkpoints/runs"
 REPORTS_DIR="$WORKDIR/checkpoints/reports"
 
 COMMAND="start"
-RUN_ID_PREFIX="phase34_nocnn_opt"
+RUN_ID_PREFIX="feature_stage34_nocnn_opt"
 DEVICE="cuda"
 USE_AMP=1
 ALLOW_ACTIVE=0
