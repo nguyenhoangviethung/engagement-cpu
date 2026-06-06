@@ -1,0 +1,10 @@
+level,manifest,rows,unique_video_id,num_frames_mean,num_frames_std,feature_dim_mean,feature_dim_std,sampled_exist,shape_mismatch_count
+openface709,data/processed/runs/openface709_pca_manifests/openface709/feature_manifest.csv,34284,8571,300.2776805506942,2.5034030518573602,,,300,0
+pca128,data/processed/runs/openface709_pca_manifests/pca128/feature_manifest.csv,34284,8571,300.2776805506942,2.5034030518573602,,,300,0
+pca160,data/processed/runs/openface709_pca_manifests/pca160/feature_manifest.csv,34284,8571,300.2776805506942,2.5034030518573602,,,300,0
+pca192,data/processed/runs/openface709_pca_manifests/pca192/feature_manifest.csv,34284,8571,300.2776805506942,2.5034030518573602,,,300,0
+pca224,data/processed/runs/openface709_pca_manifests/pca224/feature_manifest.csv,34284,8571,300.2776805506942,2.5034030518573602,,,300,0
+pca256,data/processed/runs/openface709_pca_manifests/pca256/feature_manifest.csv,34284,8571,300.2776805506942,2.5034030518573602,,,300,0
+pca300,data/processed/runs/openface709_pca_manifests/pca300/feature_manifest.csv,34284,8571,300.2776805506942,2.5034030518573602,,,300,0
+pca384,data/processed/runs/openface709_pca_manifests/pca384/feature_manifest.csv,34284,8571,300.2776805506942,2.5034030518573602,,,300,0
+pca96,data/processed/runs/openface709_pca_manifests/pca96/feature_manifest.csv,34284,8571,300.2776805506942,2.5034030518573602,,,300,0

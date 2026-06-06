@@ -6,7 +6,7 @@ CONDA_ENV="${CONDA_ENV:?}"
 RUN_ID_PREFIX="${RUN_ID_PREFIX:?}"
 RNN_MANIFEST="${RNN_MANIFEST:?}"
 ML_MANIFEST="${ML_MANIFEST:?}"
-CNN_MANIFEST="${CNN_MANIFEST:?}"
+CNN_MANIFEST="${CNN_MANIFEST:-}"
 RNN_MODELS="${RNN_MODELS:?}"
 INCLUDE_ML="${INCLUDE_ML:?}"
 INCLUDE_CNN="${INCLUDE_CNN:?}"
@@ -21,6 +21,10 @@ RNN_BATCH_SIZE="${RNN_BATCH_SIZE:-128}"
 RNN_EPOCHS="${RNN_EPOCHS:-40}"
 RNN_PATIENCE="${RNN_PATIENCE:-10}"
 RNN_MIN_EPOCHS="${RNN_MIN_EPOCHS:-12}"
+RNN_LEARNING_RATE="${RNN_LEARNING_RATE:-3e-4}"
+RNN_WEIGHT_DECAY="${RNN_WEIGHT_DECAY:-1e-4}"
+RNN_SCHEDULER="${RNN_SCHEDULER:-plateau}"
+RNN_FREEZE_FEATURE_EPOCHS="${RNN_FREEZE_FEATURE_EPOCHS:-0}"
 RNN_TCN_BLOCKS="${RNN_TCN_BLOCKS:-4}"
 RNN_TCN_KERNEL_SIZE="${RNN_TCN_KERNEL_SIZE:-5}"
 RNN_THRESHOLD_OBJECTIVE="${RNN_THRESHOLD_OBJECTIVE:-balanced_accuracy}"
@@ -30,10 +34,11 @@ ML_THRESHOLD_OBJECTIVE="${ML_THRESHOLD_OBJECTIVE:-accuracy}"
 ML_DIM_REDUCTION="${ML_DIM_REDUCTION:-none}"
 ML_DIM_COMPONENTS="${ML_DIM_COMPONENTS:-128}"
 ML_OVERSAMPLE="${ML_OVERSAMPLE:-none}"
-CNN_MODEL="${CNN_MODEL:?}"
-CNN_BATCH_SIZE="${CNN_BATCH_SIZE:?}"
-CNN_EPOCHS="${CNN_EPOCHS:?}"
-CNN_IMAGE_SIZE="${CNN_IMAGE_SIZE:?}"
+ML_FEATURE_MODE="${ML_FEATURE_MODE:-tsfresh}"
+CNN_MODEL="${CNN_MODEL:-mobilenet_v3_small}"
+CNN_BATCH_SIZE="${CNN_BATCH_SIZE:-64}"
+CNN_EPOCHS="${CNN_EPOCHS:-12}"
+CNN_IMAGE_SIZE="${CNN_IMAGE_SIZE:-112}"
 CNN_FRAMES_PER_VIDEO="${CNN_FRAMES_PER_VIDEO:-8}"
 CNN_PRETRAINED="${CNN_PRETRAINED:-1}"
 CNN_FREEZE_BACKBONE="${CNN_FREEZE_BACKBONE:-0}"
@@ -128,8 +133,8 @@ PY
   echo "$out_manifest"
 }
 
-RNN_MANIFEST_LOCAL="$(ensure_local_manifest "$RNN_MANIFEST" "$WORKDIR/data/processed/runs/pipeline_2/features" "$RUN_ROOT/rnn_manifest.local.csv")"
-ML_MANIFEST_LOCAL="$(ensure_local_manifest "$ML_MANIFEST" "$WORKDIR/data/processed/runs/pipeline_2/features" "$RUN_ROOT/ml_manifest.local.csv")"
+RNN_MANIFEST_LOCAL="$(ensure_local_manifest "$RNN_MANIFEST" "$WORKDIR/data/processed/runs/baseline_pipeline_features/features" "$RUN_ROOT/rnn_manifest.local.csv")"
+ML_MANIFEST_LOCAL="$(ensure_local_manifest "$ML_MANIFEST" "$WORKDIR/data/processed/runs/baseline_pipeline_features/features" "$RUN_ROOT/ml_manifest.local.csv")"
 echo "rnn_manifest_local=$RNN_MANIFEST_LOCAL" | tee -a "$RUN_LOG"
 echo "ml_manifest_local=$ML_MANIFEST_LOCAL" | tee -a "$RUN_LOG"
 
@@ -204,7 +209,9 @@ for model in $RNN_MODELS; do
     --manifest "$RNN_MANIFEST_LOCAL" --output "$ckpt" --run-id "$rid" --model "$model" --device "$DEVICE" \
     --cpu-threads "$RNN_CPU_THREADS" --hidden-size "$RNN_HIDDEN_SIZE" --num-layers "$RNN_NUM_LAYERS" \
     --dropout "$RNN_DROPOUT" --batch-size "$RNN_BATCH_SIZE" --epochs "$RNN_EPOCHS" \
-    --patience "$RNN_PATIENCE" --min-epochs "$RNN_MIN_EPOCHS" --tcn-blocks "$RNN_TCN_BLOCKS" \
+    --patience "$RNN_PATIENCE" --min-epochs "$RNN_MIN_EPOCHS" --lr "$RNN_LEARNING_RATE" \
+    --weight-decay "$RNN_WEIGHT_DECAY" --scheduler "$RNN_SCHEDULER" \
+    --freeze-feature-epochs "$RNN_FREEZE_FEATURE_EPOCHS" --tcn-blocks "$RNN_TCN_BLOCKS" \
     --tcn-kernel-size "$RNN_TCN_KERNEL_SIZE" --threshold-objective "$RNN_THRESHOLD_OBJECTIVE" \
     --loss "$RNN_LOSS" 2>&1 | tee -a "$RUN_LOG"
 
@@ -234,7 +241,7 @@ if [[ "$INCLUDE_ML" == "1" ]]; then
 
   echo "[ML] rid=$rid" | tee -a "$RUN_LOG"
   "$WORKDIR/scripts/lib/run_python.sh" --env "$CONDA_ENV" --workdir "$WORKDIR" env PYTHONPATH="$WORKDIR/src" python -m engagement_daisee.ml.train$sample_flag \
-    --manifest "$ML_MANIFEST_LOCAL" --output "$model_path" --run-id "$rid" --backend auto --feature-mode tsfresh \
+    --manifest "$ML_MANIFEST_LOCAL" --output "$model_path" --run-id "$rid" --backend auto --feature-mode "$ML_FEATURE_MODE" \
     --cpu-workers "$ML_CPU_WORKERS" --threshold-objective "$ML_THRESHOLD_OBJECTIVE" \
     --dim-reduction "$ML_DIM_REDUCTION" --dim-components "$ML_DIM_COMPONENTS" --oversample "$ML_OVERSAMPLE" 2>&1 | tee -a "$RUN_LOG"
 
@@ -250,7 +257,7 @@ if [[ "$INCLUDE_ML" == "1" ]]; then
   fi
 
   "$WORKDIR/scripts/lib/run_python.sh" --env "$CONDA_ENV" --workdir "$WORKDIR" env PYTHONPATH="$WORKDIR/src" python -m engagement_daisee.ml.evaluate \
-    --manifest "$ML_MANIFEST_LOCAL" --model "$model_path_effective" --split test --feature-mode tsfresh \
+    --manifest "$ML_MANIFEST_LOCAL" --model "$model_path_effective" --split test --feature-mode "$ML_FEATURE_MODE" \
     --summary-json "$summary_path_effective" --aggregation "$EVAL_AGGREGATION" --output-json "$eval_json" 2>&1 | tee -a "$RUN_LOG"
 
   "$WORKDIR/scripts/lib/run_python.sh" --env "$CONDA_ENV" --workdir "$WORKDIR" python - "$summary_path_effective" "$eval_json" "$agg_json" "$rid" <<'PY' | tee -a "$RUN_LOG" >> "$results_jsonl"

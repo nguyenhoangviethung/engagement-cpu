@@ -52,6 +52,8 @@ ENHANCED_LANDMARKS = [
     386,
     454,
 ]
+DENSE709_LANDMARK_COUNT = 229
+DENSE709_SCALAR_DIM = 22
 
 
 LOGGER = logging.getLogger("extract_features")
@@ -185,7 +187,79 @@ def _face_geometry_proxy(landmarks) -> np.ndarray:
     )
 
 
+def _safe_ratio(numerator: float, denominator: float) -> float:
+    return float(numerator / (denominator + 1e-6))
+
+
+def _dense_scalar_features(landmarks) -> np.ndarray:
+    left_eye_outer = _lm_xy(landmarks, 33)
+    left_eye_inner = _lm_xy(landmarks, 133)
+    right_eye_inner = _lm_xy(landmarks, 362)
+    right_eye_outer = _lm_xy(landmarks, 263)
+    left_mouth = _lm_xy(landmarks, 61)
+    right_mouth = _lm_xy(landmarks, 291)
+    upper_lip = _lm_xy(landmarks, 13)
+    lower_lip = _lm_xy(landmarks, 14)
+    nose = _lm_xy(landmarks, 1)
+    nose_tip = _lm_xy(landmarks, 4)
+    forehead = _lm_xy(landmarks, 10)
+    chin = _lm_xy(landmarks, 152)
+    left_cheek = _lm_xy(landmarks, 234)
+    right_cheek = _lm_xy(landmarks, 454)
+    face_center = (left_cheek + right_cheek + forehead + chin) / 4.0
+    left_eye_center = (left_eye_outer + left_eye_inner) / 2.0
+    right_eye_center = (right_eye_outer + right_eye_inner) / 2.0
+    eye_center = (left_eye_center + right_eye_center) / 2.0
+    mouth_center = (left_mouth + right_mouth) / 2.0
+
+    face_width = _distance(left_cheek, right_cheek) + 1e-6
+    face_height = _distance(forehead, chin) + 1e-6
+    inter_eye = _distance(left_eye_center, right_eye_center) + 1e-6
+    mouth_width = _distance(left_mouth, right_mouth)
+    mouth_open = _distance(upper_lip, lower_lip)
+    roll = math.atan2(float(right_eye_center[1] - left_eye_center[1]), float(right_eye_center[0] - left_eye_center[0]) + 1e-6)
+
+    return np.asarray(
+        [
+            _eye_aspect_ratio(landmarks, LEFT_EYE),
+            _eye_aspect_ratio(landmarks, RIGHT_EYE),
+            _mouth_aspect_ratio(landmarks),
+            (nose[0] - eye_center[0]) / inter_eye,
+            (nose[1] - eye_center[1]) / face_height,
+            roll,
+            face_width,
+            face_height,
+            _safe_ratio(inter_eye, face_width),
+            _safe_ratio(mouth_width, face_width),
+            _safe_ratio(mouth_open, mouth_width),
+            _safe_ratio(_distance(eye_center, mouth_center), face_height),
+            _safe_ratio(_distance(nose, chin), face_height),
+            _safe_ratio(_distance(forehead, nose), face_height),
+            _safe_ratio(_distance(left_eye_center, mouth_center), face_height),
+            _safe_ratio(_distance(right_eye_center, mouth_center), face_height),
+            (mouth_center[0] - nose[0]) / face_width,
+            (mouth_center[1] - nose[1]) / face_height,
+            (nose_tip[0] - face_center[0]) / face_width,
+            (nose_tip[1] - face_center[1]) / face_height,
+            _safe_ratio(_distance(left_cheek, nose), face_width),
+            _safe_ratio(_distance(right_cheek, nose), face_width),
+        ],
+        dtype=np.float32,
+    )
+
+
+def _dense_landmark_indices(landmarks) -> np.ndarray:
+    landmark_count = len(landmarks.landmark)
+    return np.linspace(0, landmark_count - 1, num=DENSE709_LANDMARK_COUNT, dtype=np.int64)
+
+
 def _build_frame_feature(landmarks, feature_set: str) -> np.ndarray:
+    if feature_set == "dense709":
+        features = _dense_scalar_features(landmarks).tolist()
+        for landmark_index in _dense_landmark_indices(landmarks):
+            features.extend(_lm_xyz(landmarks, int(landmark_index)).tolist())
+        return np.asarray(features, dtype=np.float32)
+
     features = [
         _eye_aspect_ratio(landmarks, LEFT_EYE),
         _eye_aspect_ratio(landmarks, RIGHT_EYE),
@@ -220,6 +294,8 @@ def _frame_feature_dim(feature_set: str) -> int:
         return 3 + 3 + len(BASE_LANDMARKS) * 3
     if feature_set == "enhanced":
         return 3 + 8 + 6 + len(ENHANCED_LANDMARKS) * 3
+    if feature_set == "dense709":
+        return DENSE709_SCALAR_DIM + DENSE709_LANDMARK_COUNT * 3
     raise ValueError(f"Unsupported feature_set: {feature_set}")
 
 
@@ -240,11 +316,20 @@ def _pad_sequence(sequence: list[np.ndarray], feature_set: str) -> np.ndarray:
     return np.concatenate([stacked_sequence, edge_padding], axis=0)
 
 
-def _window_frames(frame_features: list[np.ndarray], feature_set: str) -> list[np.ndarray]:
+def _window_frames(
+    frame_features: list[np.ndarray],
+    feature_set: str,
+    temporal_enrichment: str = "velocity_std",
+) -> list[np.ndarray]:
     windows: list[np.ndarray] = []
     for start_index in range(0, len(frame_features), SEQUENCE_LENGTH):
         chunk = frame_features[start_index : start_index + SEQUENCE_LENGTH]
         padded_chunk = _pad_sequence(chunk, feature_set=feature_set)
+        if temporal_enrichment == "none":
+            windows.append(padded_chunk.astype(np.float32, copy=False))
+            continue
+        if temporal_enrichment != "velocity_std":
+            raise ValueError(f"Unsupported temporal_enrichment: {temporal_enrichment}")
 
         velocity = np.zeros_like(padded_chunk, dtype=np.float32)
         velocity[1:] = padded_chunk[1:] - padded_chunk[:-1]
@@ -400,11 +485,12 @@ def extract_features(
     max_frames: int = 0,
     resize_width: int = 0,
     feature_set: str = "base",
+    temporal_enrichment: str = "velocity_std",
 ) -> Path:
     start_time = time.time()
     LOGGER.info("Starting feature extraction")
     LOGGER.info(
-        "Config | labels=%s | videos=%s | features=%s | manifest=%s | sample=%s | seed=%d | frame_stride=%d | max_frames=%d | resize_width=%d | feature_set=%s | output_dim=%d",
+        "Config | labels=%s | videos=%s | features=%s | manifest=%s | sample=%s | seed=%d | frame_stride=%d | max_frames=%d | resize_width=%d | feature_set=%s | temporal_enrichment=%s | output_dim=%d",
         processed_labels_csv,
         raw_video_dir,
         features_dir,
@@ -415,7 +501,8 @@ def extract_features(
         max_frames,
         resize_width,
         feature_set,
-        _frame_feature_dim(feature_set) * 3,
+        temporal_enrichment,
+        _frame_feature_dim(feature_set) * (1 if temporal_enrichment == "none" else 3),
     )
 
     labels_df = _collect_video_records(processed_labels_csv)
@@ -465,7 +552,11 @@ def extract_features(
                 LOGGER.warning("Skipping unreadable or empty video | video_path=%s", video_path)
                 continue
 
-            sequences = _window_frames(raw_features, feature_set=feature_set)
+            sequences = _window_frames(
+                raw_features,
+                feature_set=feature_set,
+                temporal_enrichment=temporal_enrichment,
+            )
             saved_videos += 1
             for segment_index, sequence in enumerate(sequences):
                 sequence_file = features_dir / f"{Path(video_id).stem}_seg{segment_index:04d}.npy"
@@ -484,6 +575,7 @@ def extract_features(
                         "max_frames": int(max(0, max_frames)),
                         "resize_width": int(max(0, resize_width)),
                         "feature_set": feature_set,
+                        "temporal_enrichment": temporal_enrichment,
                         "feature_dim": int(sequences[0].shape[-1]),
                     }
                 )
@@ -531,7 +623,20 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--frame-stride", type=int, default=1, help="Process every Nth frame before windowing")
     parser.add_argument("--max-frames", type=int, default=0, help="Uniformly sample at most N frames per video; 0 keeps all")
     parser.add_argument("--resize-width", type=int, default=0, help="Resize frames to this width before landmark detection; 0 disables")
-    parser.add_argument("--feature-set", type=str, default="base", choices=["base", "enhanced"], help="Facial feature recipe")
+    parser.add_argument(
+        "--feature-set",
+        type=str,
+        default="base",
+        choices=["base", "enhanced", "dense709"],
+        help="Facial feature recipe",
+    )
+    parser.add_argument(
+        "--temporal-enrichment",
+        type=str,
+        default="velocity_std",
+        choices=["none", "velocity_std"],
+        help="Append per-frame velocity and per-window std copies. Use none for exact frame feature dimension.",
+    )
     return parser.parse_args()
 
 
@@ -550,6 +655,7 @@ def main() -> None:
         max_frames=args.max_frames,
         resize_width=args.resize_width,
         feature_set=args.feature_set,
+        temporal_enrichment=args.temporal_enrichment,
     )
     LOGGER.info("Saved feature manifest to %s", manifest_path)
 

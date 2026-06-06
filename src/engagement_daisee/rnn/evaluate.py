@@ -1,5 +1,6 @@
 import argparse
 import json
+import math
 from pathlib import Path
 
 import numpy as np
@@ -16,6 +17,47 @@ def _safe_div(numerator: float, denominator: float) -> float:
     if denominator <= 0:
         return 0.0
     return float(numerator / denominator)
+
+
+def _clip_probabilities(probabilities: np.ndarray, eps: float = 1e-6) -> np.ndarray:
+    return np.clip(probabilities.astype(np.float64), eps, 1.0 - eps)
+
+
+def _logit(probabilities: np.ndarray) -> np.ndarray:
+    probs = _clip_probabilities(probabilities)
+    return np.log(probs / (1.0 - probs))
+
+
+def _sigmoid(values: np.ndarray) -> np.ndarray:
+    return 1.0 / (1.0 + np.exp(-values))
+
+
+def _calibrate_probabilities(
+    probabilities: np.ndarray,
+    *,
+    temperature: float = 1.0,
+    source_pos_prior: float | None = None,
+    target_pos_prior: float | None = None,
+) -> np.ndarray:
+    probs = _clip_probabilities(probabilities)
+    temp = max(1e-3, float(temperature))
+    calibrated = _sigmoid(_logit(probs) / temp)
+
+    if source_pos_prior is None or target_pos_prior is None:
+        return calibrated.astype(np.float32)
+
+    source = float(np.clip(source_pos_prior, 1e-4, 1.0 - 1e-4))
+    target = float(np.clip(target_pos_prior, 1e-4, 1.0 - 1e-4))
+    if math.isclose(source, target, rel_tol=0.0, abs_tol=1e-8):
+        return calibrated.astype(np.float32)
+
+    source_odds = source / (1.0 - source)
+    target_odds = target / (1.0 - target)
+    odds_multiplier = target_odds / source_odds
+    odds = calibrated / (1.0 - calibrated)
+    adjusted_odds = odds * odds_multiplier
+    adjusted = adjusted_odds / (1.0 + adjusted_odds)
+    return _clip_probabilities(adjusted).astype(np.float32)
 
 
 def _compute_binary_metrics(labels: np.ndarray, probabilities: np.ndarray, threshold: float) -> dict[str, float]:
@@ -161,6 +203,7 @@ def run_eval(
 
     ckpt_threshold = float(checkpoint.get("best_threshold", 0.5))
     resolved_threshold = float(threshold) if threshold is not None else ckpt_threshold
+    best_temperature = float(checkpoint.get("best_temperature", 1.0))
 
     feature_mean = None
     feature_std = None
@@ -180,6 +223,16 @@ def run_eval(
         feature_mean=feature_mean,
         feature_std=feature_std,
     )
+    calibration_cfg = checkpoint.get("prior_shift_calibration", {})
+    calibration_enabled = bool(calibration_cfg.get("enabled", False))
+    if calibration_enabled:
+        probabilities = _calibrate_probabilities(
+            probabilities,
+            temperature=best_temperature,
+            source_pos_prior=calibration_cfg.get("source_pos_prior"),
+            target_pos_prior=calibration_cfg.get("target_pos_prior"),
+        )
+        row_metrics = _compute_binary_metrics(labels, probabilities, threshold=resolved_threshold)
     manifest_subset = manifest_df.iloc[indices].reset_index(drop=True)
     video_labels, video_probabilities = _aggregate_by_video(manifest_subset, labels, probabilities)
     video_metrics = _compute_binary_metrics(video_labels, video_probabilities, threshold=resolved_threshold)

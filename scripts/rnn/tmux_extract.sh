@@ -10,6 +10,11 @@ SAMPLE_MODE=0
 RUN_ID=""
 RUNS_PROCESSED_DIR="$WORKDIR/data/processed/runs"
 COMMAND="start"
+FRAME_STRIDE=1
+MAX_FRAMES=0
+RESIZE_WIDTH=0
+FEATURE_SET="base"
+TEMPORAL_ENRICHMENT="velocity_std"
 
 usage() {
   cat <<'EOF'
@@ -28,6 +33,11 @@ Options:
   --env NAME          conda environment name (default: thesis)
   --log-every N       Progress log frequency for extract (videos)
   --run-id ID         Custom run id for output isolation (default: timestamp)
+  --frame-stride N
+  --max-frames N
+  --resize-width N
+  --feature-set base|enhanced|dense709
+  --temporal-enrichment none|velocity_std
   --help              Show this help
 EOF
 }
@@ -56,6 +66,26 @@ while [[ $# -gt 0 ]]; do
       ;;
     --run-id)
       RUN_ID="$2"
+      shift 2
+      ;;
+    --frame-stride)
+      FRAME_STRIDE="$2"
+      shift 2
+      ;;
+    --max-frames)
+      MAX_FRAMES="$2"
+      shift 2
+      ;;
+    --resize-width)
+      RESIZE_WIDTH="$2"
+      shift 2
+      ;;
+    --feature-set)
+      FEATURE_SET="$2"
+      shift 2
+      ;;
+    --temporal-enrichment)
+      TEMPORAL_ENRICHMENT="$2"
       shift 2
       ;;
     --help|-h)
@@ -102,7 +132,15 @@ echo "Run ID: $active_run_id" | tee -a "$run_log"
 echo "Run features dir: $run_features_dir" | tee -a "$run_log"
 echo "Run manifest: $run_manifest" | tee -a "$run_log"
 mkdir -p "$run_features_dir"
-"$WORKDIR/scripts/lib/run_python.sh" --env "$CONDA_ENV" --workdir "$WORKDIR" env PYTHONPATH="$WORKDIR/src" python -u -m engagement_daisee.rnn.extract_features$sample_flag --features-dir "$run_features_dir" --manifest "$run_manifest" --log-every "$LOG_EVERY" 2>&1 | tee -a "$run_log"
+"$WORKDIR/scripts/lib/run_python.sh" --env "$CONDA_ENV" --workdir "$WORKDIR" env PYTHONPATH="$WORKDIR/src" python -u -m engagement_daisee.rnn.extract_features$sample_flag \
+  --features-dir "$run_features_dir" \
+  --manifest "$run_manifest" \
+  --log-every "$LOG_EVERY" \
+  --frame-stride "$FRAME_STRIDE" \
+  --max-frames "$MAX_FRAMES" \
+  --resize-width "$RESIZE_WIDTH" \
+  --feature-set "$FEATURE_SET" \
+  --temporal-enrichment "$TEMPORAL_ENRICHMENT" 2>&1 | tee -a "$run_log"
 echo "=== Extract finished at \$(date) ===" | tee -a "$run_log"
 ln -sfn "$run_log" "$LATEST_LOG_LINK"
 EOF

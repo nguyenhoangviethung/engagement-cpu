@@ -10,7 +10,7 @@ REPORTS_DIR="$WORKDIR/checkpoints/reports"
 
 COMMAND="start"
 RUN_ID=""
-MANIFEST="$WORKDIR/data/processed/runs/pipeline_2/feature_manifest.csv"
+MANIFEST="$WORKDIR/data/processed/runs/baseline_pipeline_features/feature_manifest.csv"
 SAMPLE_MODE=0
 SAMPLE_VIDEOS=10
 BACKEND="auto"
@@ -32,7 +32,7 @@ Options:
   --sample
   --sample-videos N
   --backend auto|xgboost|lightgbm
-  --feature-mode basic|tsfresh
+  --feature-mode basic|tsfresh|copur
   --cpu-workers N
   --split train|validation|test
   --threshold V

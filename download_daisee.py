@@ -7,7 +7,7 @@ from pathlib import Path
 
 import kagglehub
 
-from config import RAW_DATA_DIR
+from src.engagement_daisee.common.config import RAW_DATA_DIR
 
 DATASET_ID = "olgaparfenova/daisee"
 

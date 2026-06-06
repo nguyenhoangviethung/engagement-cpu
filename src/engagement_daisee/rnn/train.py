@@ -7,6 +7,7 @@ import os
 import random
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Iterable
 
 import numpy as np
 import pandas as pd
@@ -175,6 +176,90 @@ def _safe_div(numerator: float, denominator: float) -> float:
     if denominator <= 0:
         return 0.0
     return float(numerator / denominator)
+
+
+def _clip_probabilities(probabilities: np.ndarray, eps: float = 1e-6) -> np.ndarray:
+    return np.clip(probabilities.astype(np.float64), eps, 1.0 - eps)
+
+
+def _logit(probabilities: np.ndarray) -> np.ndarray:
+    probs = _clip_probabilities(probabilities)
+    return np.log(probs / (1.0 - probs))
+
+
+def _sigmoid(values: np.ndarray) -> np.ndarray:
+    return 1.0 / (1.0 + np.exp(-values))
+
+
+def _calibrate_probabilities(
+    probabilities: np.ndarray,
+    *,
+    temperature: float = 1.0,
+    source_pos_prior: float | None = None,
+    target_pos_prior: float | None = None,
+) -> np.ndarray:
+    probs = _clip_probabilities(probabilities)
+    temp = max(1e-3, float(temperature))
+    calibrated = _sigmoid(_logit(probs) / temp)
+
+    if source_pos_prior is None or target_pos_prior is None:
+        return calibrated.astype(np.float32)
+
+    source = float(np.clip(source_pos_prior, 1e-4, 1.0 - 1e-4))
+    target = float(np.clip(target_pos_prior, 1e-4, 1.0 - 1e-4))
+    if abs(source - target) <= 1e-8:
+        return calibrated.astype(np.float32)
+
+    source_odds = source / (1.0 - source)
+    target_odds = target / (1.0 - target)
+    odds_multiplier = target_odds / source_odds
+
+    odds = calibrated / (1.0 - calibrated)
+    adjusted_odds = odds * odds_multiplier
+    adjusted = adjusted_odds / (1.0 + adjusted_odds)
+    return _clip_probabilities(adjusted).astype(np.float32)
+
+
+def _log_loss(labels: np.ndarray, probabilities: np.ndarray) -> float:
+    probs = _clip_probabilities(probabilities)
+    labels = labels.astype(np.float64)
+    return float(-np.mean(labels * np.log(probs) + (1.0 - labels) * np.log(1.0 - probs)))
+
+
+def _resolve_temperature_grid(spec: str) -> list[float]:
+    values: list[float] = []
+    for token in spec.split(","):
+        token = token.strip()
+        if not token:
+            continue
+        values.append(float(token))
+    if not values:
+        values = [1.0]
+    return sorted(set(max(1e-3, v) for v in values))
+
+
+def _find_best_temperature(
+    labels: np.ndarray,
+    probabilities: np.ndarray,
+    *,
+    temperatures: Iterable[float],
+    source_pos_prior: float | None,
+    target_pos_prior: float | None,
+) -> tuple[float, float]:
+    best_temp = 1.0
+    best_loss = math.inf
+    for temp in temperatures:
+        calibrated = _calibrate_probabilities(
+            probabilities,
+            temperature=float(temp),
+            source_pos_prior=source_pos_prior,
+            target_pos_prior=target_pos_prior,
+        )
+        loss = _log_loss(labels, calibrated)
+        if loss < best_loss:
+            best_loss = loss
+            best_temp = float(temp)
+    return best_temp, best_loss
 
 
 def _compute_binary_metrics(labels: np.ndarray, probabilities: np.ndarray, threshold: float) -> dict[str, float]:
@@ -571,7 +656,7 @@ def _build_checkpoint_payload(
     model_name: str,
     epoch: int,
     optimizer: torch.optim.Optimizer,
-    scheduler: torch.optim.lr_scheduler.ReduceLROnPlateau,
+    scheduler,
     scaler: torch.cuda.amp.GradScaler,
     early_stopping: EarlyStopping,
     best_threshold: float,
@@ -592,6 +677,10 @@ def _build_checkpoint_payload(
     device: torch.device,
     amp_enabled: bool,
     cpu_threads: int,
+    learning_rate: float,
+    weight_decay: float,
+    scheduler_name: str,
+    freeze_feature_epochs: int,
 ) -> dict:
     return {
         "epoch": int(epoch),
@@ -599,7 +688,7 @@ def _build_checkpoint_payload(
         "model_kwargs": model_kwargs,
         "model_name": model_name,
         "optimizer_state_dict": optimizer.state_dict(),
-        "scheduler_state_dict": scheduler.state_dict(),
+        "scheduler_state_dict": scheduler.state_dict() if scheduler is not None else None,
         "scaler_state_dict": scaler.state_dict() if scaler is not None else None,
         "early_stopping_bad_epochs": int(early_stopping.bad_epochs),
         "best_threshold": best_threshold,
@@ -612,6 +701,10 @@ def _build_checkpoint_payload(
         "device": str(device),
         "amp_enabled": bool(amp_enabled and device.type == "cuda"),
         "cpu_threads": int(cpu_threads),
+        "learning_rate": float(learning_rate),
+        "weight_decay": float(weight_decay),
+        "scheduler_name": scheduler_name,
+        "freeze_feature_epochs": int(freeze_feature_epochs),
         "feature_mean": feature_mean_list,
         "feature_std": feature_std_list,
         "best_objective_score": best_objective_score,
@@ -621,6 +714,18 @@ def _build_checkpoint_payload(
         "best_val_metrics_for_objective": best_val_metrics_for_objective,
         "history": history,
     }
+
+
+def _set_frontend_trainable(model: nn.Module, trainable: bool) -> int:
+    toggled = 0
+    for module_name in ("feature_encoder", "feature_extractor", "input_proj", "temporal_frontend"):
+        module = getattr(model, module_name, None)
+        if module is None:
+            continue
+        for parameter in module.parameters():
+            parameter.requires_grad = trainable
+            toggled += 1
+    return toggled
 
 
 def train(
@@ -652,6 +757,13 @@ def train(
     device_arg: str = DEVICE,
     amp_enabled: bool = True,
     resume_from: Path | None = None,
+    enable_prior_shift_calibration: bool = True,
+    target_pos_prior: float | None = None,
+    calibration_temperature_grid: str = "0.75,0.9,1.0,1.1,1.25,1.5",
+    learning_rate: float = LEARNING_RATE,
+    weight_decay: float = WEIGHT_DECAY,
+    scheduler_name: str = "plateau",
+    freeze_feature_epochs: int = 0,
 ) -> Path:
     _set_seed(seed)
     device = _resolve_device(device_arg)
@@ -722,6 +834,25 @@ def train(
         batch_size,
     )
 
+    split_priors = {}
+    for split_name, indices in (("train", train_indices), ("validation", val_indices), ("test", test_indices)):
+        split_labels = manifest_df.iloc[indices]["label"].astype(float).to_numpy()
+        split_priors[split_name] = float(split_labels.mean())
+    train_pos_prior = split_priors["train"]
+    val_pos_prior = split_priors["validation"]
+    test_pos_prior = split_priors["test"]
+    resolved_target_pos_prior = float(target_pos_prior) if target_pos_prior is not None else train_pos_prior
+    temp_grid = _resolve_temperature_grid(calibration_temperature_grid)
+    LOGGER.info(
+        "Priors | train=%.4f validation=%.4f test=%.4f | target_prior=%.4f | prior_shift_calibration=%s | temperature_grid=%s",
+        train_pos_prior,
+        val_pos_prior,
+        test_pos_prior,
+        resolved_target_pos_prior,
+        enable_prior_shift_calibration,
+        temp_grid,
+    )
+
     train_labels = manifest_df.iloc[train_indices]["label"].astype(float).to_numpy()
     positives = float(train_labels.sum())
     negatives = float(len(train_labels) - positives)
@@ -773,13 +904,25 @@ def train(
         device=str(device),
     )
     LOGGER.info("Criterion config: %s", criterion_config)
-    optimizer = torch.optim.AdamW(model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer,
-        mode="min",
-        factor=LR_SCHEDULER_FACTOR,
-        patience=LR_SCHEDULER_PATIENCE,
-    )
+    optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
+    scheduler_name = scheduler_name.strip().lower()
+    if scheduler_name == "plateau":
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            optimizer,
+            mode="min",
+            factor=LR_SCHEDULER_FACTOR,
+            patience=LR_SCHEDULER_PATIENCE,
+        )
+    elif scheduler_name == "cosine":
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            optimizer,
+            T_max=max(1, epochs),
+            eta_min=max(1e-7, learning_rate * 0.05),
+        )
+    elif scheduler_name == "none":
+        scheduler = None
+    else:
+        raise ValueError(f"Unsupported scheduler: {scheduler_name}")
     early_stopping = EarlyStopping(patience=patience)
     scaler = torch.cuda.amp.GradScaler(enabled=(amp_enabled and device.type == "cuda"))
 
@@ -793,6 +936,7 @@ def train(
     best_val_metrics_for_objective: dict[str, float] | None = None
     history = []
     best_objective_score = -math.inf
+    best_temperature = 1.0
     start_epoch = 1
 
     if resume_from is not None:
@@ -808,13 +952,14 @@ def train(
 
         if "optimizer_state_dict" in resume_ckpt:
             optimizer.load_state_dict(resume_ckpt["optimizer_state_dict"])
-        if "scheduler_state_dict" in resume_ckpt:
+        if scheduler is not None and resume_ckpt.get("scheduler_state_dict") is not None:
             scheduler.load_state_dict(resume_ckpt["scheduler_state_dict"])
         if resume_ckpt.get("scaler_state_dict") is not None:
             scaler.load_state_dict(resume_ckpt["scaler_state_dict"])
 
         history = resume_ckpt.get("history", history)
         best_threshold = float(resume_ckpt.get("best_threshold", best_threshold))
+        best_temperature = float(resume_ckpt.get("best_temperature", best_temperature))
         best_objective_score = float(resume_ckpt.get("best_objective_score", best_objective_score))
         best_val_precision_pos = float(resume_ckpt.get("best_val_precision_pos", best_val_precision_pos))
         best_val_balanced_accuracy = float(resume_ckpt.get("best_val_balanced_accuracy", best_val_balanced_accuracy))
@@ -838,6 +983,16 @@ def train(
         LOGGER.info("Resuming training from checkpoint=%s | completed_epoch=%d | next_epoch=%d", resume_from, completed_epoch, start_epoch)
 
     for epoch in range(start_epoch, epochs + 1):
+        if freeze_feature_epochs > 0:
+            trainable = epoch > freeze_feature_epochs
+            toggled = _set_frontend_trainable(model, trainable=trainable)
+            if epoch == 1 or epoch == freeze_feature_epochs + 1:
+                LOGGER.info(
+                    "Frontend fine-tune stage | epoch=%d | trainable=%s | parameters_toggled=%d",
+                    epoch,
+                    trainable,
+                    toggled,
+                )
         train_loss, train_metrics = _train_one_epoch(
             model,
             train_loader,
@@ -860,9 +1015,26 @@ def train(
             feature_std=feature_std,
             amp_enabled=amp_enabled,
         )
+        epoch_temperature = 1.0
+        calibrated_val_probabilities = val_probabilities
+        calibration_nll = _log_loss(val_labels, val_probabilities)
+        if enable_prior_shift_calibration:
+            epoch_temperature, calibration_nll = _find_best_temperature(
+                val_labels,
+                val_probabilities,
+                temperatures=temp_grid,
+                source_pos_prior=val_pos_prior,
+                target_pos_prior=resolved_target_pos_prior,
+            )
+            calibrated_val_probabilities = _calibrate_probabilities(
+                val_probabilities,
+                temperature=epoch_temperature,
+                source_pos_prior=val_pos_prior,
+                target_pos_prior=resolved_target_pos_prior,
+            )
         epoch_threshold, val_metrics = _find_best_threshold(
             val_labels,
-            val_probabilities,
+            calibrated_val_probabilities,
             objective=threshold_objective,
             min_recall_pos=min_recall_pos,
         )
@@ -885,6 +1057,8 @@ def train(
                 "val_recall_neg": val_metrics["recall_neg"],
                 "val_f1_macro": val_metrics["f1_macro"],
                 "val_threshold": epoch_threshold,
+                "val_temperature": epoch_temperature,
+                "val_calibration_nll": calibration_nll,
             }
         )
 
@@ -913,8 +1087,19 @@ def train(
                 optimizer.param_groups[0]["lr"],
                 threshold_objective,
         )
+            LOGGER.info(
+                "Calibration | val_temperature=%.3f val_calibration_nll=%.4f source_prior=%.4f target_prior=%.4f",
+                epoch_temperature,
+                calibration_nll,
+                val_pos_prior,
+                resolved_target_pos_prior,
+            )
 
-        scheduler.step(val_loss)
+        if scheduler is not None:
+            if scheduler_name == "plateau":
+                scheduler.step(val_loss)
+            else:
+                scheduler.step()
         objective_score = _objective_score(
             val_metrics,
             objective=threshold_objective,
@@ -938,6 +1123,7 @@ def train(
             best_val_balanced_accuracy = val_metrics["balanced_accuracy"]
             best_val_f1_macro = val_metrics["f1_macro"]
             best_threshold = epoch_threshold
+            best_temperature = epoch_temperature
             best_val_metrics_for_objective = val_metrics.copy()
             best_objective_score = objective_score
             best_payload = _build_checkpoint_payload(
@@ -967,7 +1153,19 @@ def train(
                 device=device,
                 amp_enabled=amp_enabled,
                 cpu_threads=resolved_threads,
+                learning_rate=learning_rate,
+                weight_decay=weight_decay,
+                scheduler_name=scheduler_name,
+                freeze_feature_epochs=freeze_feature_epochs,
             )
+            best_payload["best_temperature"] = float(best_temperature)
+            best_payload["prior_shift_calibration"] = {
+                "enabled": bool(enable_prior_shift_calibration),
+                "source_pos_prior": float(val_pos_prior),
+                "target_pos_prior": float(resolved_target_pos_prior),
+                "test_pos_prior_observed": float(test_pos_prior),
+                "temperature_grid": temp_grid,
+            }
             torch.save(best_payload, output_path)
 
         last_payload = _build_checkpoint_payload(
@@ -997,7 +1195,19 @@ def train(
             device=device,
             amp_enabled=amp_enabled,
             cpu_threads=resolved_threads,
+            learning_rate=learning_rate,
+            weight_decay=weight_decay,
+            scheduler_name=scheduler_name,
+            freeze_feature_epochs=freeze_feature_epochs,
         )
+        last_payload["best_temperature"] = float(best_temperature)
+        last_payload["prior_shift_calibration"] = {
+            "enabled": bool(enable_prior_shift_calibration),
+            "source_pos_prior": float(val_pos_prior),
+            "target_pos_prior": float(resolved_target_pos_prior),
+            "test_pos_prior_observed": float(test_pos_prior),
+            "temperature_grid": temp_grid,
+        }
         torch.save(last_payload, last_checkpoint_path)
 
         if early_stopping.step(objective_score, epoch=epoch, min_epochs=min_epochs):
@@ -1021,6 +1231,11 @@ def train(
         model = _build_model(**checkpoint_model_kwargs).to(device)
     model.load_state_dict(checkpoint["model_state_dict"])
     best_threshold = float(checkpoint.get("best_threshold", best_threshold))
+    best_temperature = float(checkpoint.get("best_temperature", best_temperature))
+    calibration_cfg = checkpoint.get("prior_shift_calibration", {})
+    calibration_enabled = bool(calibration_cfg.get("enabled", enable_prior_shift_calibration))
+    calibration_source_prior = calibration_cfg.get("source_pos_prior", val_pos_prior)
+    calibration_target_prior = calibration_cfg.get("target_pos_prior", resolved_target_pos_prior)
 
     test_loss, test_metrics, _, _ = _evaluate(
         model,
@@ -1032,6 +1247,29 @@ def train(
         feature_std=feature_std,
         amp_enabled=amp_enabled,
     )
+    if calibration_enabled:
+        _, _, test_labels_raw, test_probabilities_raw = _evaluate(
+            model,
+            test_loader,
+            criterion,
+            device,
+            threshold=0.5,
+            feature_mean=feature_mean,
+            feature_std=feature_std,
+            amp_enabled=amp_enabled,
+        )
+        calibrated_test_probabilities = _calibrate_probabilities(
+            test_probabilities_raw,
+            temperature=best_temperature,
+            source_pos_prior=float(calibration_source_prior),
+            target_pos_prior=float(calibration_target_prior),
+        )
+        calibrated_test_metrics = _compute_binary_metrics(
+            test_labels_raw,
+            calibrated_test_probabilities,
+            threshold=best_threshold,
+        )
+        test_metrics = calibrated_test_metrics
     LOGGER.info(
         "Test metrics | loss=%.4f acc=%.4f prec1=%.4f bal_acc=%.4f rec1=%.4f rec0=%.4f f1_macro=%.4f threshold=%.2f",
         test_loss,
@@ -1052,6 +1290,7 @@ def train(
                 "best_val_balanced_accuracy": best_val_balanced_accuracy,
                 "best_val_f1_macro": best_val_f1_macro,
                 "best_threshold": best_threshold,
+                "best_temperature": best_temperature,
                 "threshold_objective": threshold_objective,
                 "min_recall_pos": min_recall_pos,
                 "loss_name": loss_name,
@@ -1061,6 +1300,10 @@ def train(
                 "device": str(device),
                 "amp_enabled": bool(amp_enabled and device.type == "cuda"),
                 "cpu_threads": int(resolved_threads),
+                "learning_rate": float(learning_rate),
+                "weight_decay": float(weight_decay),
+                "scheduler_name": scheduler_name,
+                "freeze_feature_epochs": int(freeze_feature_epochs),
                 "batch_size": int(batch_size),
                 "epochs": int(epochs),
                 "patience": int(patience),
@@ -1075,6 +1318,14 @@ def train(
                 "test_recall_pos": test_metrics["recall_pos"],
                 "test_recall_neg": test_metrics["recall_neg"],
                 "test_f1_macro": test_metrics["f1_macro"],
+                "prior_shift_calibration": {
+                    "enabled": bool(calibration_enabled),
+                    "source_pos_prior": float(calibration_source_prior),
+                    "target_pos_prior": float(calibration_target_prior),
+                    "train_pos_prior": float(train_pos_prior),
+                    "validation_pos_prior": float(val_pos_prior),
+                    "test_pos_prior_observed": float(test_pos_prior),
+                },
                 "history": history,
             },
             indent=2,
@@ -1143,6 +1394,23 @@ def parse_args() -> argparse.Namespace:
         help="Disable train-split feature normalization",
     )
     parser.add_argument(
+        "--disable-prior-shift-calibration",
+        action="store_true",
+        help="Disable prior-shift + temperature probability calibration for thresholding/eval",
+    )
+    parser.add_argument(
+        "--target-pos-prior",
+        type=float,
+        default=None,
+        help="Target positive prior for calibration; defaults to train split prior",
+    )
+    parser.add_argument(
+        "--calibration-temperature-grid",
+        type=str,
+        default="0.75,0.9,1.0,1.1,1.25,1.5",
+        help="Comma-separated temperature grid searched on validation split",
+    )
+    parser.add_argument(
         "--model",
         type=str,
         default="gru",
@@ -1150,9 +1418,19 @@ def parse_args() -> argparse.Namespace:
             "gru",
             "gru_basic",
             "simple_gru",
+            "bilstm",
+            "bi_lstm",
+            "copur_bilstm",
             "tcn",
             "1dcnn",
             "temporal_cnn",
+            "stgcn",
+            "st-gcn",
+            "graph_tcn",
+            "hybrid",
+            "hybrid_attn",
+            "tcn_gru_attn",
+            "multiscale_gru_attn",
             "transformer",
             "tiny_transformer",
         ],
@@ -1182,6 +1460,21 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--batch-size", type=int, default=BATCH_SIZE, help="Training and validation batch size")
     parser.add_argument("--epochs", type=int, default=EPOCHS, help="Maximum training epochs")
     parser.add_argument("--patience", type=int, default=EARLY_STOPPING_PATIENCE, help="Early-stopping patience")
+    parser.add_argument("--lr", type=float, default=LEARNING_RATE, help="AdamW learning rate")
+    parser.add_argument("--weight-decay", type=float, default=WEIGHT_DECAY, help="AdamW weight decay")
+    parser.add_argument(
+        "--scheduler",
+        type=str,
+        default="plateau",
+        choices=["plateau", "cosine", "none"],
+        help="Learning-rate scheduler",
+    )
+    parser.add_argument(
+        "--freeze-feature-epochs",
+        type=int,
+        default=0,
+        help="Freeze feature/frontend projection layers for the first N epochs, then fine-tune end-to-end",
+    )
     parser.add_argument(
         "--min-epochs",
         type=int,
@@ -1246,6 +1539,13 @@ def main() -> None:
         device_arg=args.device,
         amp_enabled=amp_enabled,
         resume_from=args.resume_from,
+        enable_prior_shift_calibration=not args.disable_prior_shift_calibration,
+        target_pos_prior=args.target_pos_prior,
+        calibration_temperature_grid=args.calibration_temperature_grid,
+        learning_rate=args.lr,
+        weight_decay=args.weight_decay,
+        scheduler_name=args.scheduler,
+        freeze_feature_epochs=args.freeze_feature_epochs,
     )
     LOGGER.info("Saved checkpoint to %s", checkpoint_path)
 

@@ -238,6 +238,46 @@ def _sequence_to_tsfresh_like_features(sequence: np.ndarray) -> np.ndarray:
     ).astype(np.float32)
 
 
+def _sequence_to_copur_features(sequence: np.ndarray, top_k: int = 3) -> np.ndarray:
+    """OpenFace/BiLSTM-inspired clip aggregation used by Copur's public code.
+
+    The thesis implementation summarizes short overlapping temporal windows with
+    simple statistics plus Fourier-domain descriptors before feeding sequence
+    models. Here we expose the same idea as a tabular feature mode so tree
+    models can use it without re-extracting video features.
+    """
+    sequence = np.asarray(sequence, dtype=np.float32)
+    centered = sequence - sequence.mean(axis=0, keepdims=True)
+    spectrum = np.abs(np.fft.rfft(centered, axis=0)).astype(np.float32)
+
+    if spectrum.shape[0] <= 1:
+        spectrum_no_dc = np.zeros((1, sequence.shape[1]), dtype=np.float32)
+    else:
+        spectrum_no_dc = spectrum[1:]
+
+    if spectrum_no_dc.shape[0] < top_k:
+        padding = np.zeros((top_k - spectrum_no_dc.shape[0], sequence.shape[1]), dtype=np.float32)
+        top_coefficients = np.concatenate([spectrum_no_dc, padding], axis=0)
+    else:
+        top_coefficients = np.sort(spectrum_no_dc, axis=0)[-top_k:][::-1]
+
+    length = np.full(sequence.shape[1], float(sequence.shape[0]), dtype=np.float32)
+
+    return np.concatenate(
+        [
+            sequence.mean(axis=0),
+            sequence.var(axis=0),
+            sequence.std(axis=0),
+            sequence.min(axis=0),
+            sequence.max(axis=0),
+            length,
+            spectrum_no_dc.mean(axis=0),
+            spectrum_no_dc.var(axis=0),
+            top_coefficients.reshape(-1),
+        ]
+    ).astype(np.float32)
+
+
 def _sequence_to_tabular_features(sequence: np.ndarray, feature_mode: str) -> np.ndarray:
     sequence = np.asarray(sequence, dtype=np.float32)
     if sequence.ndim == 1:
@@ -248,6 +288,8 @@ def _sequence_to_tabular_features(sequence: np.ndarray, feature_mode: str) -> np
         return _sequence_to_basic_features(sequence)
     if feature_mode == "tsfresh":
         return _sequence_to_tsfresh_like_features(sequence)
+    if feature_mode == "copur":
+        return _sequence_to_copur_features(sequence)
     raise ValueError(f"Unsupported feature_mode: {feature_mode}")
 
 
@@ -709,7 +751,7 @@ def parse_args() -> argparse.Namespace:
         "--feature-mode",
         type=str,
         default="tsfresh",
-        choices=["basic", "tsfresh"],
+        choices=["basic", "tsfresh", "copur"],
         help="Feature engineering mode from each temporal sequence",
     )
     parser.add_argument(

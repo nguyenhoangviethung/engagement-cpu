@@ -11,8 +11,8 @@ REPORTS_DIR="$WORKDIR/checkpoints/reports"
 
 COMMAND="start"
 RUN_ID_PREFIX="p2"
-RNN_MANIFEST="$WORKDIR/data/processed/runs/pipeline_2/feature_manifest.csv"
-ML_MANIFEST="$WORKDIR/data/processed/runs/pipeline_2/feature_manifest.csv"
+RNN_MANIFEST="$WORKDIR/data/processed/runs/baseline_pipeline_features/feature_manifest.csv"
+ML_MANIFEST="$WORKDIR/data/processed/runs/baseline_pipeline_features/feature_manifest.csv"
 CNN_MANIFEST="$WORKDIR/data/processed/cnn_frame_manifest.csv"
 
 RNN_MODELS="gru gru_basic tcn tiny_transformer"
@@ -30,6 +30,10 @@ RNN_BATCH_SIZE=128
 RNN_EPOCHS=40
 RNN_PATIENCE=10
 RNN_MIN_EPOCHS=12
+RNN_LEARNING_RATE=3e-4
+RNN_WEIGHT_DECAY=1e-4
+RNN_SCHEDULER="plateau"
+RNN_FREEZE_FEATURE_EPOCHS=0
 RNN_TCN_BLOCKS=4
 RNN_TCN_KERNEL_SIZE=5
 RNN_THRESHOLD_OBJECTIVE="balanced_accuracy"
@@ -81,6 +85,10 @@ Options:
   --rnn-epochs N
   --rnn-patience N
   --rnn-min-epochs N
+  --rnn-lr V
+  --rnn-weight-decay V
+  --rnn-scheduler plateau|cosine|none
+  --rnn-freeze-feature-epochs N
   --rnn-tcn-blocks N
   --rnn-tcn-kernel-size N
   --rnn-threshold-objective NAME
@@ -131,6 +139,10 @@ while [[ $# -gt 0 ]]; do
     --rnn-epochs) RNN_EPOCHS="$2"; shift 2 ;;
     --rnn-patience) RNN_PATIENCE="$2"; shift 2 ;;
     --rnn-min-epochs) RNN_MIN_EPOCHS="$2"; shift 2 ;;
+    --rnn-lr) RNN_LEARNING_RATE="$2"; shift 2 ;;
+    --rnn-weight-decay) RNN_WEIGHT_DECAY="$2"; shift 2 ;;
+    --rnn-scheduler) RNN_SCHEDULER="$2"; shift 2 ;;
+    --rnn-freeze-feature-epochs) RNN_FREEZE_FEATURE_EPOCHS="$2"; shift 2 ;;
     --rnn-tcn-blocks) RNN_TCN_BLOCKS="$2"; shift 2 ;;
     --rnn-tcn-kernel-size) RNN_TCN_KERNEL_SIZE="$2"; shift 2 ;;
     --rnn-threshold-objective) RNN_THRESHOLD_OBJECTIVE="$2"; shift 2 ;;
@@ -191,6 +203,8 @@ ML_DIM_REDUCTION='$ML_DIM_REDUCTION' ML_DIM_COMPONENTS='$ML_DIM_COMPONENTS' ML_O
 RNN_HIDDEN_SIZE='$RNN_HIDDEN_SIZE' RNN_NUM_LAYERS='$RNN_NUM_LAYERS' RNN_DROPOUT='$RNN_DROPOUT' \
 RNN_BATCH_SIZE='$RNN_BATCH_SIZE' RNN_EPOCHS='$RNN_EPOCHS' RNN_PATIENCE='$RNN_PATIENCE' \
 RNN_MIN_EPOCHS='$RNN_MIN_EPOCHS' RNN_TCN_BLOCKS='$RNN_TCN_BLOCKS' RNN_TCN_KERNEL_SIZE='$RNN_TCN_KERNEL_SIZE' \
+RNN_LEARNING_RATE='$RNN_LEARNING_RATE' RNN_WEIGHT_DECAY='$RNN_WEIGHT_DECAY' RNN_SCHEDULER='$RNN_SCHEDULER' \
+RNN_FREEZE_FEATURE_EPOCHS='$RNN_FREEZE_FEATURE_EPOCHS' \
 RNN_THRESHOLD_OBJECTIVE='$RNN_THRESHOLD_OBJECTIVE' RNN_LOSS='$RNN_LOSS' \
 CNN_MODEL='$CNN_MODEL' CNN_BATCH_SIZE='$CNN_BATCH_SIZE' CNN_EPOCHS='$CNN_EPOCHS' CNN_IMAGE_SIZE='$CNN_IMAGE_SIZE' \
 CNN_FRAMES_PER_VIDEO='$CNN_FRAMES_PER_VIDEO' CNN_PRETRAINED='$CNN_PRETRAINED' CNN_FREEZE_BACKBONE='$CNN_FREEZE_BACKBONE' \
