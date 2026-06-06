@@ -54,7 +54,7 @@ Nhung goi can quan tam:
   - chua cac model `rnn_gru`, `rnn_tcn`, `rnn_tiny_transformer`, `gru_basic`
 - `checkpoints/runs/trainml_train_all_ml.zip`
   - chua model XGBoost final
-- `checkpoints/runs/train_all_feature_stage34_20260523_030236.zip`
+- `checkpoints/runs/train_all_phase34_20260523_030236.zip`
   - chua CNN tot nhat trong nhom da bao cao
 
 Ngoai ra, cac file tong hop da co san tren HF:

@@ -9,7 +9,7 @@ RUNS_CHECKPOINT_DIR="$WORKDIR/checkpoints/runs"
 
 COMMAND="start"
 RUN_ID="paper_baseline"
-MANIFEST="$WORKDIR/data/processed/runs/sequence_features_stage34/feature_manifest.csv"
+MANIFEST="$WORKDIR/data/processed/runs/phase34_sequence_features/feature_manifest.csv"
 SPLIT_MODE="video_80_20"
 FEATURE_MODE="copur"
 BACKEND="xgboost"

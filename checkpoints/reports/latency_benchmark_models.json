@@ -7,7 +7,7 @@
   "samples": {
     "rnn_sequence": "/home/bear/engagement-cpu/data/processed/runs/baseline_pipeline_features/features/5000441001_seg0000.npy",
     "ml_sequence": "/home/bear/engagement-cpu/data/processed/runs/baseline_pipeline_features/features/5000441001_seg0000.npy",
-    "cnn_frame": "/home/bear/engagement-cpu/data/processed/runs/cnn_frame_features_stage34/cnn_frames/test/5000441001/5000441001_f00000.jpg"
+    "cnn_frame": "/home/bear/engagement-cpu/data/processed/runs/phase34_train_all_features/cnn_frames/test/5000441001/5000441001_f00000.jpg"
   },
   "rows": [
     {

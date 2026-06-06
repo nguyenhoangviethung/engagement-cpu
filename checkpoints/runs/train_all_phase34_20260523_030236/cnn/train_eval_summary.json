@@ -1,5 +1,5 @@
 {
-  "run_id": "feature_stage34_cnn",
+  "run_id": "phase34_cnn",
   "module": "cnn",
   "model": "efficientnet_b0",
   "train": {
@@ -145,8 +145,8 @@
     ]
   },
   "eval": {
-    "manifest": "/home/bear/engagement-cpu/scripts/../data/processed/runs/cnn_frame_features_stage34/cnn_frame_manifest.csv",
-    "checkpoint": "/home/bear/engagement-cpu/scripts/../checkpoints/runs/train_all_feature_stage34_20260523_030236/cnn/engagement_cnn.pt",
+    "manifest": "/home/bear/engagement-cpu/scripts/../data/processed/runs/phase34_train_all_features/cnn_frame_manifest.csv",
+    "checkpoint": "/home/bear/engagement-cpu/scripts/../checkpoints/runs/train_all_phase34_20260523_030236/cnn/engagement_cnn.pt",
     "split": "test",
     "rows": 14241,
     "videos": 1784,
