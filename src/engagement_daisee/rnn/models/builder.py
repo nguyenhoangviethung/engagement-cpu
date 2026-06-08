@@ -1,4 +1,5 @@
 from engagement_daisee.common.config import FEATURE_DIM
+from engagement_daisee.rnn.models.evolved import EngagementCNNGRUFusion, EngagementResidualBiGRUAttention
 from engagement_daisee.rnn.models.gru import BasicGRUClassifier, EngagementGRU
 from engagement_daisee.rnn.models.hybrid import EngagementHybridAttention
 from engagement_daisee.rnn.models.lstm import EngagementBiLSTM
@@ -74,6 +75,24 @@ def build_sequence_model(
             max_seq_len=max_seq_len,
         )
 
+    if name in {"cnn_gru_fusion", "spatiotemporal_hybrid", "cnn_bigru_fusion"}:
+        return EngagementCNNGRUFusion(
+            input_size=input_size,
+            hidden_size=hidden_size,
+            num_layers=max(1, num_layers),
+            dropout=dropout,
+            kernel_size=kernel_size,
+        )
+
+    if name in {"residual_bigru_attn", "res_bigru_attn", "bigru_self_attn"}:
+        return EngagementResidualBiGRUAttention(
+            input_size=input_size,
+            hidden_size=hidden_size,
+            num_layers=max(1, num_layers),
+            dropout=dropout,
+            num_heads=num_heads,
+        )
+
     if name in {"transformer", "tiny_transformer"}:
         return EngagementTinyTransformer(
             input_size=input_size,
@@ -89,5 +108,6 @@ def build_sequence_model(
         f"{model_name}. Expected one of: gru, gru_basic|simple_gru, "
         "bilstm|bi_lstm|copur_bilstm, tcn|1dcnn|temporal_cnn, "
         "stgcn|st-gcn|graph_tcn, hybrid_attn|tcn_gru_attn, "
+        "cnn_gru_fusion|residual_bigru_attn, "
         "transformer|tiny_transformer"
     )

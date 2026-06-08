@@ -5,6 +5,7 @@ from pathlib import Path
 import numpy as np
 
 from engagement_daisee.common.config import FEATURE_MANIFEST_CSV
+from engagement_daisee.common.manifest import normalize_manifest_columns
 from engagement_daisee.ml.train import (
     _apply_feature_preprocessor,
     _build_feature_matrix,
@@ -114,7 +115,7 @@ def run_eval(
     output_json: Path | None,
     aggregation: str,
 ) -> dict:
-    manifest = _load_manifest(manifest_path)
+    manifest = normalize_manifest_columns(_load_manifest(manifest_path))
 
     split_name = split.strip().lower()
     split_series = manifest["split"].astype(str).str.lower().to_numpy()

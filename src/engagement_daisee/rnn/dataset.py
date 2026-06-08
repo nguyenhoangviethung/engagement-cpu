@@ -5,13 +5,15 @@ import pandas as pd
 import torch
 from torch.utils.data import Dataset
 
+from engagement_daisee.common.manifest import normalize_manifest_columns
+
 class FeatureSequenceDataset(Dataset):
     def __init__(self, manifest_csv: str | Path):
         self.manifest_csv = Path(manifest_csv)
         if not self.manifest_csv.exists():
             raise FileNotFoundError(f"Manifest CSV not found: {self.manifest_csv}")
 
-        manifest = pd.read_csv(self.manifest_csv)
+        manifest = normalize_manifest_columns(pd.read_csv(self.manifest_csv))
         required_columns = {"feature_path", "label"}
         missing_columns = required_columns - set(manifest.columns)
         if missing_columns:

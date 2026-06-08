@@ -1,241 +1,239 @@
-# Huong dan infer cho production pipeline
+# GUIDE: Production inference cho tat ca model
 
-Tai lieu nay mo ta cach dung cac artifact hien co de suy luan trong moi truong production. Muc tieu la deploy nhanh, uu tien CPU, va tan dung cac model da duoc day len Hugging Face duoi dang zip.
+Tai lieu nay dung cho production/devops khi can lay artifact hien co va chay infer. Tat ca duong dan ben duoi la duong dan trong repo sau khi da doi ten run folder cho ro nghia.
 
-## 1. Chon pipeline nao cho production
+## 1. Chon model
 
-Co 2 huong infer phu hop nhat voi repo hien tai:
+| Muc dich | Model nen dung | Ly do |
+|---|---|---|
+| Accuracy/F1 tot nhat | `late_fusion_gru_tcn_xgb` | Ensemble GRU + TCN + XGBoost, Accuracy 75.95%, F1 macro 73.86% |
+| Single model co balanced accuracy cao nhat | `gru` | Test Balanced Accuracy 77.35% |
+| Single model moi tot nhat | `residual_bigru_attn` | Balanced Accuracy 73.76%, Accuracy 72.03% |
+| CPU don gian, model-side latency thap | `xgboost` | Model-side latency khoang 0.48 ms |
+| Neural latency nhe hon | `cnn_gru_fusion` | Model-side latency khoang 8.96 ms |
 
-1. `RNN GRU`:
-   - Chat luong tot nhat trong bao cao.
-   - Nen dung cho production neu uu tien do chinh xac.
-   - Nen convert checkpoint `.pt` thanh TorchScript `.ts` truoc khi deploy CPU.
+## 2. Input contract
 
-2. `XGBoost final`:
-   - Nhe hon, de deploy hon.
-   - Hop khi uu tien don gian va latency phan model.
-   - Van can sequence `.npy` dau vao, sau do tu trich feature tabular trong luc infer.
+Model production trong bao cao khong nhan video tho truc tiep. Pipeline can tach thanh:
 
-Khuyen nghi mac dinh:
+1. Video/frame stream -> MediaPipe FaceMesh features
+2. Features -> window/sequence `.npy`
+3. Sequence `.npy` -> model probability
+4. Apply threshold -> prediction
 
-- Neu can model manh nhat: dung `train_all_train_all.zip` -> `rnn_gru`.
-- Neu can model nhe va don gian: dung `trainml_train_all_ml.zip` -> `engagement_xgb.json`.
-
-## 2. Dieu can nho nhat ve dau vao
-
-Entry point infer hien tai trong repo khong nhan video tho truc tiep.
-
-Ca 2 nhanh `rnn` va `ml` deu nhan dau vao la file `sequence .npy`:
-
-- `rnn`: [src/engagement_daisee/rnn/infer.py](../../src/engagement_daisee/rnn/infer.py)
-- `ml`: [src/engagement_daisee/ml/infer.py](../../src/engagement_daisee/ml/infer.py)
-
-Dieu nay co nghia la production pipeline can co 2 tang:
-
-1. `Preprocess`: video/frame stream -> feature extraction -> windowing/sequence `.npy`
-2. `Model infer`: `.npy` -> xac suat + nhan
-
-Neu muon pipeline online tu webcam/video:
-
-- MediaPipe feature extraction: [src/engagement_daisee/mediapipe/extract_features.py](../../src/engagement_daisee/mediapipe/extract_features.py)
-- RNN-style sequence extraction: [src/engagement_daisee/rnn/extract_features.py](../../src/engagement_daisee/rnn/extract_features.py)
-
-## 3. Artifact can lay tu Hugging Face
-
-Tren HF, checkpoint dang duoc luu chu yeu duoi dang zip tung run, vi script upload dung `--zip-runs`:
-
-- [scripts/data/hf_push_data.sh](../../scripts/data/hf_push_data.sh:309)
-
-No zip toan bo noi dung cua moi run folder roi moi upload. Nghia la model weights, summary json, eval json, preprocess artifact... nam ben trong file zip cua run.
-
-Nhung goi can quan tam:
-
-- `checkpoints/runs/train_all_train_all.zip`
-  - chua cac model `rnn_gru`, `rnn_tcn`, `rnn_tiny_transformer`, `gru_basic`
-- `checkpoints/runs/trainml_train_all_ml.zip`
-  - chua model XGBoost final
-- `checkpoints/runs/train_all_phase34_20260523_030236.zip`
-  - chua CNN tot nhat trong nhom da bao cao
-
-Ngoai ra, cac file tong hop da co san tren HF:
-
-- `checkpoints/reports/selected_model_performance.csv`
-- `checkpoints/reports/run_metrics_manifest709.csv`
-- `checkpoints/reports/bao_cao_ket_qua_huan_luyen_models.md`
-
-## 4. Pipeline de xuat cho production
-
-### 4.1 Pipeline A: RNN GRU production
-
-Day la pipeline nen uu tien neu ban can model manh nhat.
-
-Buoc 1: lay va giai nen run zip
-
-- Lay `checkpoints/runs/train_all_train_all.zip` tu HF
-- Giai nen vao mot thu muc tam, vi du:
-
-```bash
-mkdir -p /tmp/engagement_prod
-unzip train_all_train_all.zip -d /tmp/engagement_prod/train_all_train_all
-```
-
-Sau khi giai nen, checkpoint can dung la:
+Shape dau vao chuan cho RNN/TCN/hybrid:
 
 ```text
-/tmp/engagement_prod/train_all_train_all/rnn_gru/engagement_gru.pt
+(T, F) hoac (B, T, F)
+T = 30
+F = 90
 ```
 
-Buoc 2: convert checkpoint sang artifact deploy CPU
+XGBoost cung nhan sequence `.npy`, sau do `ml.infer` tu chuyen sequence sang tabular feature bang `feature-mode tsfresh`.
 
-Script convert:
+CNN baseline la ngoai le: no nhan anh/frame RGB truc tiep, khong phai sequence.
 
-- [src/engagement_daisee/rnn/optimize_inference.py](../../src/engagement_daisee/rnn/optimize_inference.py)
+Luu y manifest tren disk dung cot `partition` cho train/validation/test. Cac CLI van giu tham so `--split` de tuong thich voi code train/evaluate hien co.
 
-Script nay tao ra:
+## 3. Artifact va threshold
 
-- `engagement_fp32.ts`
-- `engagement_int8_dynamic.ts`
-- `inference_meta.json`
+| Model | Artifact | Threshold | Ghi chu |
+|---|---|---:|---|
+| `gru` | `checkpoints/runs/final_rnn_temporal_models_20260529/rnn_gru/engagement_gru.pt` | 0.63 | Best single-model balanced accuracy |
+| `tcn` | `checkpoints/runs/final_rnn_temporal_models_20260529/rnn_tcn/engagement_tcn.pt` | 0.61 | Nen dung trong late fusion |
+| `gru_basic` | `checkpoints/runs/final_rnn_temporal_models_20260529/rnn_gru_basic/engagement_gru_basic.pt` | 0.61 | Baseline RNN nhe |
+| `tiny_transformer` | `checkpoints/runs/final_rnn_temporal_models_20260529/rnn_tiny_transformer/engagement_tiny_transformer.pt` | 0.55 | Baseline transformer |
+| `xgboost` | `checkpoints/runs/final_xgboost_tsfresh_20260529/engagement_xgb.json` | 0.49 | Can them summary/preprocess |
+| `cnn_gru_fusion` | `checkpoints/runs/evolved_rnn_hybrid_models_20260608/rnn_cnn_gru_fusion/engagement_cnn_gru_fusion.pt` | 0.64 | Hybrid 1D-CNN + GRU |
+| `residual_bigru_attn` | `checkpoints/runs/evolved_rnn_hybrid_models_20260608/rnn_residual_bigru_attn/engagement_residual_bigru_attn.pt` | 0.55 | Residual BiGRU + attention |
+| `late_fusion_gru_tcn_xgb` | `checkpoints/reports/late_fusion_gru_tcn_xgb_report.json` | 0.54 | Fuse prob: 0.30 GRU + 0.30 TCN + 0.40 XGBoost |
+| `cnn_efficientnet_b0` | `checkpoints/runs/train_all_phase34_20260523_030236/cnn/engagement_cnn.pt` | 0.19 | Frame-based baseline, khong khuyen nghi lam model chinh |
 
-Vi du:
+XGBoost can them:
+
+```text
+checkpoints/runs/final_xgboost_tsfresh_20260529/engagement_xgb.summary.json
+checkpoints/runs/final_xgboost_tsfresh_20260529/engagement_xgb.preprocess.npz
+```
+
+## 4. Infer RNN/TCN/hybrid
+
+Checkpoint `.pt` la training checkpoint. Khi deploy CPU, nen convert sang TorchScript truoc.
+
+Vi du convert GRU:
 
 ```bash
-PYTHONPATH=src python -m engagement_daisee.rnn.optimize_inference \
-  --checkpoint /tmp/engagement_prod/train_all_train_all/rnn_gru/engagement_gru.pt \
+PYTHONPATH=src python3 -m engagement_daisee.rnn.optimize_inference \
+  --checkpoint checkpoints/runs/final_rnn_temporal_models_20260529/rnn_gru/engagement_gru.pt \
   --output-dir checkpoints/deploy/gru_final \
   --cpu-threads 2 \
   --benchmark-iters 200
 ```
 
-Artifact deploy sau cung:
+Lenh nay tao:
 
 ```text
+checkpoints/deploy/gru_final/engagement_fp32.ts
 checkpoints/deploy/gru_final/engagement_int8_dynamic.ts
 checkpoints/deploy/gru_final/inference_meta.json
 ```
 
-Buoc 3: chay infer
+Infer mot sequence:
 
 ```bash
-PYTHONPATH=src python -m engagement_daisee.rnn.infer \
+PYTHONPATH=src python3 -m engagement_daisee.rnn.infer \
   --artifact checkpoints/deploy/gru_final/engagement_int8_dynamic.ts \
   --meta checkpoints/deploy/gru_final/inference_meta.json \
-  --sequence /path/to/sequence.npy \
+  --sequence /path/to/window.npy \
   --cpu-threads 2
 ```
 
-Output la JSON gom:
-
-- `threshold`
-- `probabilities`
-- `predictions`
-
-### 4.2 Pipeline B: XGBoost production
-
-Day la pipeline nhe hon, de rollout hon neu ban da co sequence `.npy`.
-
-Buoc 1: lay va giai nen run zip
-
-- Lay `checkpoints/runs/trainml_train_all_ml.zip` tu HF
-- Giai nen ra thu muc tam
-
-Artifact can dung:
+Dung cung quy trinh tren cho:
 
 ```text
-/tmp/engagement_prod/trainml_train_all_ml/engagement_xgb.json
-/tmp/engagement_prod/trainml_train_all_ml/engagement_xgb.summary.json
-/tmp/engagement_prod/trainml_train_all_ml/engagement_xgb.preprocess.npz
+tcn
+gru_basic
+tiny_transformer
+cnn_gru_fusion
+residual_bigru_attn
 ```
 
-Buoc 2: chay infer
+Chi can doi `--checkpoint` va `--output-dir`.
+
+Neu can evaluate truc tiep checkpoint `.pt` tren manifest:
 
 ```bash
-PYTHONPATH=src python -m engagement_daisee.ml.infer \
-  --model /tmp/engagement_prod/trainml_train_all_ml/engagement_xgb.json \
-  --summary-json /tmp/engagement_prod/trainml_train_all_ml/engagement_xgb.summary.json \
-  --sequence /path/to/sequence.npy \
+PYTHONPATH=src python3 -m engagement_daisee.rnn.evaluate \
+  --manifest data/processed/runs/daisee_binary_final_dataset/feature_manifest.csv \
+  --checkpoint checkpoints/runs/final_rnn_temporal_models_20260529/rnn_gru/engagement_gru.pt \
+  --split test \
+  --threshold 0.63 \
+  --aggregation video
+```
+
+## 5. Infer XGBoost
+
+```bash
+PYTHONPATH=src python3 -m engagement_daisee.ml.infer \
+  --model checkpoints/runs/final_xgboost_tsfresh_20260529/engagement_xgb.json \
+  --summary-json checkpoints/runs/final_xgboost_tsfresh_20260529/engagement_xgb.summary.json \
+  --sequence /path/to/window.npy \
   --feature-mode tsfresh
 ```
 
-Luu y:
+Output co dang:
 
-- `ml.infer` se tu bien doi sequence thanh feature tabular thong qua `_sequence_to_tabular_features`.
-- `summary_json` duoc dung de lay `selected_threshold`.
-
-## 5. Chay bang tmux scripts co san
-
-Neu muon chay infer bang script bao log/tmux thay vi goi module Python truc tiep:
-
-### RNN
-
-- [scripts/rnn/tmux_infer.sh](../../scripts/rnn/tmux_infer.sh)
-
-Vi du:
-
-```bash
-./scripts/rnn/tmux_infer.sh start \
-  --artifact checkpoints/deploy/gru_final/engagement_int8_dynamic.ts \
-  --meta checkpoints/deploy/gru_final/inference_meta.json \
-  --sequence /path/to/sequence.npy \
-  --cpu-threads 2
+```json
+{
+  "model": ".../engagement_xgb.json",
+  "sequence": ".../window.npy",
+  "backend": "xgboost",
+  "feature_mode": "tsfresh",
+  "threshold": 0.49,
+  "probability": 0.0,
+  "prediction": 0
+}
 ```
 
-### ML
+## 6. Infer late-fusion ensemble
 
-- [scripts/ml/tmux_infer.sh](../../scripts/ml/tmux_infer.sh)
+Late-fusion hien chua co CLI single-window rieng. Production can tinh 3 xac suat rieng roi fuse:
 
-Vi du:
-
-```bash
-./scripts/ml/tmux_infer.sh start \
-  --model /tmp/engagement_prod/trainml_train_all_ml/engagement_xgb.json \
-  --summary-json /tmp/engagement_prod/trainml_train_all_ml/engagement_xgb.summary.json \
-  --sequence /path/to/sequence.npy \
-  --feature-mode tsfresh
+```python
+p_final = (0.30 * p_gru) + (0.30 * p_tcn) + (0.40 * p_xgb)
+prediction = int(p_final >= 0.54)
 ```
 
-## 6. Production pipeline toi thieu
+Artifact can doc de lay weights/metrics:
 
-Neu trien khai thanh service, pipeline toi thieu nen la:
+```text
+checkpoints/reports/late_fusion_gru_tcn_xgb_report.json
+```
 
-1. Nhan video stream hoac frame stream
-2. Extract feature bang MediaPipe
-3. Gom frame thanh mot sequence co do dai co dinh
-4. Luu/tao tensor hoac `.npy` trung gian
-5. Goi model infer
-6. Ap threshold tu metadata
-7. Tra ve:
-   - `probability`
-   - `prediction`
-   - timestamp/window id
+Thanh phan ensemble:
 
-Kieu shape hien tai:
+```text
+GRU:     checkpoints/runs/final_rnn_temporal_models_20260529/rnn_gru/engagement_gru.pt
+TCN:     checkpoints/runs/final_rnn_temporal_models_20260529/rnn_tcn/engagement_tcn.pt
+XGBoost: checkpoints/runs/final_xgboost_tsfresh_20260529/engagement_xgb.json
+```
 
-- RNN infer ky vong `(T, F)` hoac `(B, T, F)`
-- ML infer ky vong sequence `.npy`, sau do noi bo chuyen thanh vector tabular
+Khuyen nghi deploy:
 
-## 7. Khuyen nghi deploy thuc te
+1. Convert GRU va TCN sang TorchScript bang `rnn.optimize_inference`.
+2. Chay GRU infer lay `p_gru`.
+3. Chay TCN infer lay `p_tcn`.
+4. Chay XGBoost infer lay `p_xgb`.
+5. Tinh `p_final` theo cong thuc tren.
+6. Tra ve threshold `0.54` va weights trong response de trace.
 
-- Chon `RNN GRU` neu uu tien chat luong tong the.
-- Chon `XGBoost` neu uu tien pipeline gon va model-side infer nhanh.
-- Dung TorchScript `int8_dynamic` cho CPU-serving cua RNN.
-- Giu `inference_meta.json` di kem artifact, vi no chua threshold can dung luc infer.
-- Khong nen dung checkpoint `.pt` truc tiep trong production neu ban da co the convert sang `.ts`.
+## 7. Infer CNN baseline
 
-## 8. Ngoai le: focus monitor webcam
+CNN baseline nhan anh RGB, phu hop lam baseline frame-level hon la model chinh.
 
-Repo co mot ung dung webcam realtime:
+```bash
+PYTHONPATH=src python3 -m engagement_daisee.cnn.infer \
+  --checkpoint checkpoints/runs/train_all_phase34_20260523_030236/cnn/engagement_cnn.pt \
+  --image /path/to/frame.jpg \
+  --threshold 0.19
+```
 
-- [src/engagement_daisee/app/focus_monitor.py](../../src/engagement_daisee/app/focus_monitor.py)
-- [scripts/app/run_focus_monitor_webcam.sh](../../scripts/app/run_focus_monitor_webcam.sh)
+Output co `probability`, `prediction`, `model_name`, `image_size`.
 
-Nhanh nay la heuristic multi-signal tren MediaPipe, khong phai chinh model DAiSEE final trong bao cao. No phu hop cho demo hoac prototype webcam, nhung khong nen xem la duong infer chuan cua `gru final` hoac `xgboost final`.
+## 8. Service response nen co
 
-## 9. Checklist truoc khi go live
+Moi response production nen log toi thieu:
 
-- Da co artifact tu HF zip va da giai nen
-- Da co sequence `.npy` dung shape
-- Da xac nhan threshold trong `inference_meta.json` hoac `engagement_xgb.summary.json`
-- Da benchmark tren may deploy that su
-- Da log lai `probability`, `prediction`, `model_version`, `threshold`
-- Da co fallback khi khong detect duoc mat hoac sequence rong
+```json
+{
+  "model_name": "late_fusion_gru_tcn_xgb",
+  "model_version": "20260608",
+  "threshold": 0.54,
+  "probability": 0.0,
+  "prediction": 0,
+  "window_start_ms": 0,
+  "window_end_ms": 0,
+  "input_shape": [30, 90]
+}
+```
+
+Voi late fusion, nen them:
+
+```json
+{
+  "components": {
+    "gru": 0.0,
+    "tcn": 0.0,
+    "xgboost": 0.0
+  },
+  "weights": {
+    "gru": 0.30,
+    "tcn": 0.30,
+    "xgboost": 0.40
+  }
+}
+```
+
+## 9. Fallback va loi production
+
+Can xu ly cac truong hop:
+
+- Khong detect duoc face trong nhieu frame lien tiep.
+- Sequence ngan hon 30 frame.
+- Feature co NaN/Inf.
+- Shape khong phai `(30, 90)` hoac `(B, 30, 90)`.
+- File `.ts` khong di kem `inference_meta.json`.
+- XGBoost thieu `summary.json` hoac `preprocess.npz`.
+
+Fallback goi y:
+
+- Neu khong du frame: tra ve `prediction = null`, `probability = null`, `reason = "insufficient_sequence"`.
+- Neu khong detect face: tra ve `reason = "face_not_detected"`.
+- Neu co NaN/Inf: replace bang 0 sau normalize hoac reject window, nhung phai log.
+
+## 10. Tai lieu lien quan
+
+- Report chinh: `checkpoints/reports/bao_cao_ket_qua_huan_luyen_models.md`
+- Latency model-side: `checkpoints/reports/latency_benchmark_models.csv`
+- Latency raw-video-to-prediction: `checkpoints/reports/end_to_end_latency_benchmark.csv`
+- Late fusion metrics: `checkpoints/reports/late_fusion_gru_tcn_xgb_report.json`

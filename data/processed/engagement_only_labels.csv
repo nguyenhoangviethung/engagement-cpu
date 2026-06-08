@@ -1,4 +1,4 @@
-video_id,engagement_raw,boredom_raw,confusion_raw,frustration_raw,engagement_binary,split
+video_id,engagement_raw,boredom_raw,confusion_raw,frustration_raw,engagement_binary,partition
 1100011002.avi,2,0,0,0,1,train
 1100011003.avi,2,0,0,0,1,train
 1100011004.avi,3,0,0,0,1,train

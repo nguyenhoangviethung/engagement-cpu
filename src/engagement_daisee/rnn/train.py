@@ -35,6 +35,7 @@ from engagement_daisee.common.config import (
     SAMPLE_EPOCHS,
     WEIGHT_DECAY,
 )
+from engagement_daisee.common.manifest import normalize_manifest_columns
 from engagement_daisee.rnn.dataset import FeatureSequenceDataset
 from engagement_daisee.rnn.models.builder import build_sequence_model
 
@@ -121,6 +122,7 @@ def _resolve_device(device_arg: str) -> torch.device:
 
 
 def _official_split_indices(manifest: pd.DataFrame) -> tuple[list[int], list[int], list[int]]:
+    manifest = normalize_manifest_columns(manifest)
     if "split" not in manifest.columns:
         raise ValueError(
             "Manifest is missing required 'split' column. "
@@ -791,7 +793,8 @@ def train(
         normalize_features,
         str(resume_from) if resume_from is not None else None,
     )
-    LOGGER.info("Resolved device=%s | amp_enabled=%s", device, amp_enabled)
+    amp_effective = bool(amp_enabled and device.type == "cuda")
+    LOGGER.info("Resolved device=%s | amp_requested=%s | amp_effective=%s", device, amp_enabled, amp_effective)
 
     dataset = FeatureSequenceDataset(manifest_csv)
     manifest_df = dataset.manifest
@@ -1431,6 +1434,12 @@ def parse_args() -> argparse.Namespace:
             "hybrid_attn",
             "tcn_gru_attn",
             "multiscale_gru_attn",
+            "cnn_gru_fusion",
+            "spatiotemporal_hybrid",
+            "cnn_bigru_fusion",
+            "residual_bigru_attn",
+            "res_bigru_attn",
+            "bigru_self_attn",
             "transformer",
             "tiny_transformer",
         ],

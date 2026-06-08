@@ -13,6 +13,7 @@ from sklearn.decomposition import PCA, TruncatedSVD
 from xgboost import XGBClassifier
 
 from engagement_daisee.common.config import CHECKPOINT_DIR, FEATURE_MANIFEST_CSV, RANDOM_SEED
+from engagement_daisee.common.manifest import normalize_manifest_columns
 
 try:
     from lightgbm import LGBMClassifier
@@ -297,7 +298,7 @@ def _load_manifest(manifest_path: Path) -> pd.DataFrame:
     if not manifest_path.exists():
         raise FileNotFoundError(f"Manifest not found: {manifest_path}")
 
-    manifest = pd.read_csv(manifest_path)
+    manifest = normalize_manifest_columns(pd.read_csv(manifest_path))
     required_columns = {"feature_path", "label", "split"}
     missing = required_columns - set(manifest.columns)
     if missing:

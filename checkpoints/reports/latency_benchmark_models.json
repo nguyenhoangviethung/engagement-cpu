@@ -15,99 +15,176 @@
       "family": "RNN",
       "variant": "eager_fp32",
       "input": "sequence:1x30x90",
-      "latency_ms_mean": 10.630357070002296,
-      "latency_ms_median": 10.5637195001691,
-      "latency_ms_p95": 11.355644000104803,
-      "latency_ms_min": 9.561908000023323,
-      "latency_ms_max": 15.709055999877819
+      "latency_ms_mean": 23.95442290653591,
+      "latency_ms_median": 23.809952499505016,
+      "latency_ms_p95": 29.02742999867769,
+      "latency_ms_min": 10.89006199981668,
+      "latency_ms_max": 209.865136002918
     },
     {
       "model": "rnn_gru_final",
       "family": "RNN",
       "variant": "torchscript_fp32",
       "input": "sequence:1x30x90",
-      "latency_ms_mean": 10.443776560005062,
-      "latency_ms_median": 10.091348500054664,
-      "latency_ms_p95": 10.832117999825641,
-      "latency_ms_min": 9.33361700003843,
-      "latency_ms_max": 53.25206999987131
+      "latency_ms_mean": 27.431883173364138,
+      "latency_ms_median": 23.082627998519456,
+      "latency_ms_p95": 27.827711001009448,
+      "latency_ms_min": 17.133048000687268,
+      "latency_ms_max": 465.0924039997335
     },
     {
       "model": "rnn_gru_final",
       "family": "RNN",
       "variant": "int8_dynamic",
       "input": "sequence:1x30x90",
-      "latency_ms_mean": 8.82898744333867,
-      "latency_ms_median": 8.778259999985494,
-      "latency_ms_p95": 9.259982999992644,
-      "latency_ms_min": 8.03750700015371,
-      "latency_ms_max": 16.151738000189653
+      "latency_ms_mean": 30.87518008339733,
+      "latency_ms_median": 20.143641499089426,
+      "latency_ms_p95": 38.50429600061034,
+      "latency_ms_min": 14.604979998694034,
+      "latency_ms_max": 615.9273299999768
     },
     {
       "model": "rnn_tcn_final",
       "family": "RNN",
       "variant": "eager_fp32",
       "input": "sequence:1x30x90",
-      "latency_ms_mean": 8.029515006674805,
-      "latency_ms_median": 8.04585900004895,
-      "latency_ms_p95": 8.530803999974523,
-      "latency_ms_min": 7.1725630000401,
-      "latency_ms_max": 8.980687000075704
+      "latency_ms_mean": 19.67424859663879,
+      "latency_ms_median": 16.404067499024677,
+      "latency_ms_p95": 33.6484460021893,
+      "latency_ms_min": 12.077552997652674,
+      "latency_ms_max": 124.02067999937572
     },
     {
       "model": "rnn_tcn_final",
       "family": "RNN",
       "variant": "torchscript_fp32",
       "input": "sequence:1x30x90",
-      "latency_ms_mean": 7.0796967466678025,
-      "latency_ms_median": 7.079902499981472,
-      "latency_ms_p95": 7.6162299999396055,
-      "latency_ms_min": 6.198573000119723,
-      "latency_ms_max": 8.208860999957324
+      "latency_ms_mean": 23.270535643435625,
+      "latency_ms_median": 14.554278499417705,
+      "latency_ms_p95": 100.03728199808393,
+      "latency_ms_min": 9.697796002001269,
+      "latency_ms_max": 108.00421199746779
     },
     {
       "model": "rnn_tcn_final",
       "family": "RNN",
       "variant": "int8_dynamic",
       "input": "sequence:1x30x90",
-      "latency_ms_mean": 7.366017926659272,
-      "latency_ms_median": 7.323747499981437,
-      "latency_ms_p95": 8.181576999959361,
-      "latency_ms_min": 6.535514000006515,
-      "latency_ms_max": 9.322902000121758
+      "latency_ms_mean": 16.24312679011685,
+      "latency_ms_median": 12.985821000256692,
+      "latency_ms_p95": 31.954498001141474,
+      "latency_ms_min": 12.13304200064158,
+      "latency_ms_max": 45.621753997693304
+    },
+    {
+      "model": "rnn_residual_bigru_attn",
+      "family": "RNN",
+      "variant": "eager_fp32",
+      "input": "sequence:1x30x90",
+      "latency_ms_mean": 33.20588348667419,
+      "latency_ms_median": 21.029121500760084,
+      "latency_ms_p95": 84.24411599844461,
+      "latency_ms_min": 10.785627997393021,
+      "latency_ms_max": 1078.966067001602
+    },
+    {
+      "model": "rnn_residual_bigru_attn",
+      "family": "RNN",
+      "variant": "torchscript_fp32",
+      "input": "sequence:1x30x90",
+      "latency_ms_mean": 14.850824309990761,
+      "latency_ms_median": 11.060171000281116,
+      "latency_ms_p95": 25.080313000216847,
+      "latency_ms_min": 10.045262002677191,
+      "latency_ms_max": 141.2403180002002
+    },
+    {
+      "model": "rnn_residual_bigru_attn",
+      "family": "RNN",
+      "variant": "int8_dynamic",
+      "input": "sequence:1x30x90",
+      "latency_ms_mean": 9.242064146783378,
+      "latency_ms_median": 9.135303000221029,
+      "latency_ms_p95": 9.762956000486156,
+      "latency_ms_min": 8.477760002278956,
+      "latency_ms_max": 17.327445002592867
+    },
+    {
+      "model": "rnn_cnn_gru_fusion",
+      "family": "RNN",
+      "variant": "eager_fp32",
+      "input": "sequence:1x30x90",
+      "latency_ms_mean": 11.161908216721107,
+      "latency_ms_median": 11.066165499869385,
+      "latency_ms_p95": 12.079299001925392,
+      "latency_ms_min": 10.531544998229947,
+      "latency_ms_max": 13.255992998892907
+    },
+    {
+      "model": "rnn_cnn_gru_fusion",
+      "family": "RNN",
+      "variant": "torchscript_fp32",
+      "input": "sequence:1x30x90",
+      "latency_ms_mean": 10.77698632338676,
+      "latency_ms_median": 10.74279349995777,
+      "latency_ms_p95": 11.395451998396311,
+      "latency_ms_min": 10.005747000832343,
+      "latency_ms_max": 12.114116998418467
+    },
+    {
+      "model": "rnn_cnn_gru_fusion",
+      "family": "RNN",
+      "variant": "int8_dynamic",
+      "input": "sequence:1x30x90",
+      "latency_ms_mean": 8.955146070038609,
+      "latency_ms_median": 8.90218049971736,
+      "latency_ms_p95": 9.47958600227139,
+      "latency_ms_min": 8.493252997141099,
+      "latency_ms_max": 9.987998000724474
     },
     {
       "model": "xgboost_final",
       "family": "ML",
       "variant": "xgboost",
       "input": "tabular:1x2161",
-      "latency_ms_mean": 0.5052469033353191,
-      "latency_ms_median": 0.4945460000271851,
-      "latency_ms_p95": 0.5638519999138225,
-      "latency_ms_min": 0.44610000009015494,
-      "latency_ms_max": 1.0914649999449466
+      "latency_ms_mean": 0.4840322568270494,
+      "latency_ms_median": 0.47714549873489887,
+      "latency_ms_p95": 0.5284079998091329,
+      "latency_ms_min": 0.4459179981495254,
+      "latency_ms_max": 1.2360000000626314
+    },
+    {
+      "model": "late_fusion_gru_tcn_xgb",
+      "family": "Ensemble",
+      "variant": "gru_int8+tcn_torchscript+xgboost",
+      "input": "sequence:1x30x90+tabular:1x2161",
+      "latency_ms_mean": 16.054737539998314,
+      "latency_ms_median": 15.617924502294045,
+      "latency_ms_p95": 18.87441000144463,
+      "latency_ms_min": 14.650725002866238,
+      "latency_ms_max": 20.345519998954842
     },
     {
       "model": "cnn_efficientnet_b0",
       "family": "CNN",
       "variant": "eager_fp32",
       "input": "image:1x3x224x224",
-      "latency_ms_mean": 56.979013456658926,
-      "latency_ms_median": 53.09530349995839,
-      "latency_ms_p95": 85.70379899992986,
-      "latency_ms_min": 46.41111599994474,
-      "latency_ms_max": 121.37461900010749
+      "latency_ms_mean": 54.121756843354284,
+      "latency_ms_median": 49.894475498149404,
+      "latency_ms_p95": 80.0071650010068,
+      "latency_ms_min": 39.33981700174627,
+      "latency_ms_max": 128.49821399868233
     },
     {
       "model": "santoni_pca_svd_cnn_arch",
       "family": "Paper CNN",
       "variant": "eager_fp32_untrained_arch",
       "input": "image:1x1x300x300",
-      "latency_ms_mean": 131.55952098333196,
-      "latency_ms_median": 125.76576499998282,
-      "latency_ms_p95": 174.79281400005675,
-      "latency_ms_min": 117.30572199985545,
-      "latency_ms_max": 265.12041099999806
+      "latency_ms_mean": 120.05827359672064,
+      "latency_ms_median": 119.00527749821777,
+      "latency_ms_p95": 127.19053100227029,
+      "latency_ms_min": 114.27740499857464,
+      "latency_ms_max": 155.13650899811182
     }
   ]
 }

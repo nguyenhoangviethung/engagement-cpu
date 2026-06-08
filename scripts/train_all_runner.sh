@@ -65,7 +65,7 @@ echo "run_root=$RUN_ROOT" | tee -a "$RUN_LOG"
 
 sample_flag=""
 [[ "$SAMPLE_MODE" == "1" ]] && sample_flag=" --sample"
-amp_flag=""
+amp_flag=" --no-amp"
 [[ "$USE_AMP" == "1" ]] && amp_flag=" --amp"
 cnn_pretrained_flag=""
 [[ "$CNN_PRETRAINED" == "1" ]] && cnn_pretrained_flag=" --pretrained"

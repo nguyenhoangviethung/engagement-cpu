@@ -5,6 +5,8 @@ import torch
 from PIL import Image
 from torch.utils.data import Dataset
 
+from engagement_daisee.common.manifest import normalize_manifest_columns
+
 
 class DAiSEECNNFrameDataset(Dataset):
     def __init__(self, manifest_csv: str | Path, indices: list[int] | None = None, transform=None):
@@ -12,7 +14,7 @@ class DAiSEECNNFrameDataset(Dataset):
         if not self.manifest_csv.exists():
             raise FileNotFoundError(f"Manifest not found: {self.manifest_csv}")
 
-        df = pd.read_csv(self.manifest_csv)
+        df = normalize_manifest_columns(pd.read_csv(self.manifest_csv))
         required = {"frame_path", "label"}
         missing = required - set(df.columns)
         if missing:
@@ -37,4 +39,3 @@ class DAiSEECNNFrameDataset(Dataset):
             image = self.transform(image)
         label = torch.tensor(float(row["label"]), dtype=torch.float32)
         return image, label
-
