@@ -172,15 +172,17 @@ Fallback goi y:
 
 ## 8. Latency notes
 
-Latency product hien co:
+| Model | Latency kind | Model-side mean / P95 | E2E mean / P95 | Min | Max |
+| :--- | :--- | :--- | :--- | ---: | ---: |
+| `fixed_triple_xgb_fusion` | processed feature sequence sample | 11.42 / 11.82 ms | 11.37 / 11.91 ms | 10.90 ms | 12.06 ms |
+| `fusion_sweep_xgb_4class` | processed feature sequence sample | 11.77 / 12.19 ms | 11.42 / 11.89 ms | 11.23 ms | 12.82 ms |
+| `xgboost_final` | processed feature sequence sample | 0.94 / 1.02 ms | 3.88 / 4.19 ms | - | - |
+| `accuracy_boost_xgb` | processed feature sequence sample | 0.90 / 0.97 ms | 4.10 / 4.41 ms | 0.84 ms | 1.19 ms |
+| `accuracy_targeted_xgb` | processed feature sequence sample | 0.79 / 0.84 ms | 4.34 / 4.68 ms | 0.75 ms | 1.18 ms |
+| `paper_cnn_santoni` | raw-video pipeline sample | 124.12 / 140.36 ms | 11,756.86 / 12,256.12 ms | 116.98 ms | 185.03 ms |
 
-| Model | Latency kind | Mean | Median | P95 | Min | Max |
-| :--- | :--- | ---: | ---: | ---: | ---: | ---: |
-| `fixed_triple_xgb_fusion` | model-side processed feature sequence | 11.42 ms | 11.41 ms | 11.82 ms | 10.90 ms | 12.06 ms |
-| `xgboost_final` | model-side processed feature sequence | 0.94 ms | - | 1.02 ms | - | - |
-| `accuracy_boost_xgb` | model-side processed feature sequence | 0.90 ms | 0.88 ms | 0.97 ms | 0.84 ms | 1.19 ms |
-| `accuracy_targeted_xgb` | model-side processed feature sequence | 0.79 ms | 0.78 ms | 0.84 ms | 0.75 ms | 1.18 ms |
-
+`Model-side latency` chi tinh chi phi predict sau khi da co processed feature.
+`E2E latency` trong cac report 4-class XGBoost/Inception/Ordinal la pipeline doc processed feature sequence sample + build feature + predict, khong phai raw video end-to-end voi face extraction.
 Neu can so sanh raw-video end-to-end, phai do them pipeline video -> face landmarks -> feature -> model tren cung may. Khong lay model-side latency de thay cho latency raw-video.
 
 ## 9. Tai lieu lien quan

@@ -1,0 +1,15 @@
+{
+  "model": "santoni_pca_svd_cnn_arch",
+  "family": "Paper CNN",
+  "variant": "eager_fp32_untrained_arch",
+  "input": "image:1x1x300x300",
+  "threads": 2,
+  "warmup": 30,
+  "iters": 300,
+  "latency_ms_mean": 124.11979308347024,
+  "latency_ms_median": 121.12601200351492,
+  "latency_ms_p95": 140.35949500248535,
+  "latency_ms_min": 116.9847459968878,
+  "latency_ms_max": 185.02777700632578,
+  "note": "Architecture-level model-side latency on CPU; same CNN body used for Santoni PCA-CNN and SVD-CNN."
+}

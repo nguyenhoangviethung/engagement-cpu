@@ -61,8 +61,9 @@ Latency duoc do tren CPU, input la processed feature sequence da co san.
 | Latency kind | Mean | Median | P95 | Min | Max |
 | :--- | ---: | ---: | ---: | ---: | ---: |
 | Model-side fixed triple-XGB fusion | **11.42 ms** | **11.41 ms** | **11.82 ms** | 10.90 ms | 12.06 ms |
+| E2E fixed triple-XGB fusion | **11.37 ms** | **11.33 ms** | **11.91 ms** | 10.88 ms | 12.27 ms |
 
-Chua co benchmark end-to-end raw-video rieng cho fixed triple-XGB fusion. Cac run XGBoost 4-class don le co E2E model pipeline khoang 4-5 ms khi doc processed sequence va build tabular feature; neu tinh tu video tho thi latency se bi chi phoi boi buoc face/landmark extraction nhu cac pipeline cu.
+E2E nay do tren processed feature sequence cua sample test, bao gom doc sequence + build tabular feature + predict. Neu tinh tu video tho thi latency se bi chi phoi boi buoc face/landmark extraction nhu cac pipeline cu.
 
 ## 3. Leaderboard 4-class
 
@@ -70,8 +71,8 @@ Bang nay chi gom cac run 4-class. `Model-side latency` la latency CPU tren input
 
 | No. | Run | Model / Selection | Accuracy | Balanced Acc | F1 Macro | Model-side latency mean / P95 | E2E latency mean / P95 | Report |
 | ---: | :--- | :--- | ---: | ---: | ---: | :--- | :--- | :--- |
-| 1 | `fixed_triple_xgb_reproduction` | **Fixed Triple-XGB Fusion** | **76.01%** | **79.98%** | **77.34%** | 13.30 / 11.82 ms | Chua do | `fixed_triple_xgb_reproduction.json` |
-| 2 | `fusion_sweep_xgb_4class` | Validation-selected Triple-XGB Fusion | 74.16% | 77.59% | 76.30% | 11.77 / 12.19 ms | Chua do | `fusion_sweep_xgb_4class.json` |
+| 1 | `fixed_triple_xgb_reproduction` | **Fixed Triple-XGB Fusion** | **76.01%** | **79.98%** | **77.34%** | 11.42 / 11.82 ms | 11.37 / 11.91 ms | `fixed_triple_xgb_reproduction.json` |
+| 2 | `fusion_sweep_xgb_4class` | Validation-selected Triple-XGB Fusion | 74.16% | 77.59% | 76.30% | 11.77 / 12.19 ms | 11.42 / 11.89 ms | `fusion_sweep_xgb_4class.json` |
 | 3 | `daisee_4class_gpu_final` | XGBoost final | 73.82% | 76.35% | 77.27% | 0.94 / 1.02 ms | 3.88 / 4.19 ms | `daisee_4class_gpu_final.json` |
 | 4 | `late_fusion_4class_daisee4_fusion` | GRU/TCN/XGBoost = 0.16/0.00/0.84 | 73.04% | 76.49% | 76.88% | 435.99 / 1868.08 ms | 1520.30 / 2283.96 ms | `late_fusion_4class_daisee4_fusion.json` |
 | 5 | `inception_lite_ensemble_xgb` | InceptionLite/XGBoost = 0.00/1.00 | 73.82% | 76.35% | 77.27% | 1.18 / 1.97 ms | 5.14 / 5.64 ms | `inception_lite_ensemble_xgb.json` |
@@ -131,20 +132,20 @@ bash scripts/reproduce_product_4class.sh
 
 Bang nay chi dung cac moc 4-class. Nhieu paper DAiSEE khong cong bo Balanced Accuracy va latency, vi vay khong nen tu suy dien metric khong co trong paper.
 
-| Nguon/model | Protocol | Accuracy | Balanced Acc | Latency | Ghi chu |
-| :--- | :--- | ---: | ---: | :--- | :--- |
-| Santoni et al. 2023 - SVD-CNN | DAiSEE 4-class, OpenFace 709D -> SVD 300D, SMOTE, 80:20 split | **77.97%** | Khong cong bo | Khong cong bo | Moc accuracy tham chieu cao nhat da dung trong do an. |
-| **Ours - Fixed Triple-XGB Fusion** | DAiSEE 4-class, processed final dataset, video aggregation | **76.01%** | **79.98%** | 11.42 ms model-side | Thap hon Santoni 1.96 diem % ve Accuracy, nhung co Balanced Accuracy va CPU latency ro rang. |
-| Santoni et al. 2023 - PCA-CNN | DAiSEE 4-class, OpenFace 709D -> PCA 300D, SMOTE, 80:20 split | 72.88% | Khong cong bo | Khong cong bo | Cung pipeline Santoni nhung PCA thay SVD. |
-| PriorNet 2026 | DAiSEE native engagement classification | 69.06% | Khong cong bo | Khong cong bo | Paper/preprint can doc ky protocol. |
-| DTransformer / PANet + STformer 2024 | DAiSEE 4-class | 64.00% | Khong cong bo | Khong cong bo | Moc transformer/attention gan day. |
+| Nguon/model | Protocol | Accuracy | Balanced Acc | Model-side latency mean / P95 | E2E latency mean / P95 | Ghi chu |
+| :--- | :--- | ---: | ---: | :--- | :--- | :--- |
+| Santoni et al. 2023 - SVD-CNN | DAiSEE 4-class, OpenFace 709D -> SVD 300D, SMOTE, 80:20 split | **77.97%** | Khong cong bo | 124.12 / 140.36 ms | 11,756.86 / 12,256.12 ms | Moc accuracy tham chieu cao nhat da dung trong do an; E2E do tren raw-video pipeline sample tren may nay. |
+| **Ours - Fixed Triple-XGB Fusion** | DAiSEE 4-class, processed final dataset, video aggregation | **76.01%** | **79.98%** | 11.42 / 11.82 ms | 11.37 / 11.91 ms | Thap hon Santoni 1.96 diem % ve Accuracy, nhung co Balanced Accuracy va CPU latency ro rang; E2E do tren processed feature sequence sample. |
+| Santoni et al. 2023 - PCA-CNN | DAiSEE 4-class, OpenFace 709D -> PCA 300D, SMOTE, 80:20 split | 72.88% | Khong cong bo | 124.12 / 140.36 ms | 11,756.86 / 12,256.12 ms | Cung CNN body voi SVD-CNN; E2E do tren raw-video pipeline sample, report goc khong cong bo latency. |
+| PriorNet 2026 | DAiSEE native engagement classification | 69.06% | Khong cong bo | Khong cong bo | Khong cong bo | Paper/preprint can doc ky protocol. |
+| DTransformer / PANet + STformer 2024 | DAiSEE 4-class | 64.00% | Khong cong bo | Khong cong bo | Khong cong bo | Moc transformer/attention gan day. |
 
 Ket luan phan bien: neu hoi vi sao khong dat accuracy 77.97%, co the tra loi rang model product chap nhan trade-off khoang 1.96 diem % Accuracy de co Balanced Accuracy gan 80%, inference CPU nhanh, pipeline feature-based nhe hon va co day du metric latency/reproduce trong cung moi truong.
 
 ## 7. Ghi chu ve latency
 
 - `Model-side latency`: chi tinh chi phi predict sau khi da co processed feature.
-- `E2E latency` trong cac report 4-class XGBoost/Inception/Ordinal la pipeline doc processed sequence + build feature + predict, khong phai raw video end-to-end voi face extraction.
+- `E2E latency` trong cac report 4-class XGBoost/Inception/Ordinal la pipeline doc processed feature sequence sample + build feature + predict, khong phai raw video end-to-end voi face extraction.
 - Neu tinh tu video tho, latency se phu thuoc rat lon vao face/landmark extraction. Vi vay khi so voi paper, khong thay the latency paper bang so do noi bo neu paper khong cong bo cung protocol.
 
 ## 8. Cac file lien quan

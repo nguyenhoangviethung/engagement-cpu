@@ -1,140 +1,97 @@
 # Engagement_DAiSEE
 
-## 1) Mục tiêu chạy thực tế
+Repo này tập trung vào bài toán **DAiSEE 4-class engagement recognition** trên **processed feature sequences**.
 
-Bạn muốn:
-- train + eval trong **cùng 1 tmux session**
-- tự lưu JSON để so sánh run
-- có 1 script tổng chạy hết model qua đêm
+Mục tiêu chính:
+- train / val / test trong cùng một run
+- lưu đầy đủ metric và latency để so sánh
+- có một model product có thể reproduce và deploy lại trên CPU
 
-Repo hiện đã hỗ trợ đúng theo luồng đó.
+## Trạng thái hiện tại
 
-## 2) Dữ liệu đang dùng
+- Dataset dùng cho product: `data/processed/runs/daisee_4class_final_dataset/feature_manifest.csv`
+- Label space: 4 lớp engagement gốc của DAiSEE
+- Input chính cho model product: processed feature sequence, không phải raw video
+- Model product hiện tại: `fixed_triple_xgb_fusion`
+- Metric product test:
+  - Accuracy `76.01%`
+  - Balanced Accuracy `79.98%`
+  - F1 Macro `77.34%`
+  - Model-side latency mean `11.42 ms`
+  - E2E latency mean `11.37 ms` trên processed feature sequence sample
 
-Bạn đang dùng processed data tại:
-- `data/processed/runs/baseline_pipeline_features/feature_manifest.csv`
-- `data/processed/runs/baseline_pipeline_features/features/`
+## Artifact quan trọng
 
-Với `rnn` và `ml`, có thể train/eval trực tiếp từ đây, không cần re-process.
+- Product summary: `checkpoints/runs/product_4class_fixed_triple_xgb/summary.json`
+- Product reproduce config: `checkpoints/runs/product_4class_fixed_triple_xgb/reproduction_config.json`
+- Product artifact README: `checkpoints/runs/product_4class_fixed_triple_xgb/README.md`
+- Báo cáo chính: `checkpoints/reports/bao_cao_ket_qua_huan_luyen_models.md`
+- GUIDE production: `checkpoints/reports/GUIDE.md`
 
-## 3) Cấu trúc model (đã tách rõ)
+## Cấu trúc model chính
 
-- `src/engagement_daisee/rnn/models/gru.py`
-  - `gru` (BiGRU + attention, model chính)
-  - `gru_basic` / `simple_gru` (GRU cơ bản, giữ lại để baseline)
-- `src/engagement_daisee/rnn/models/tcn.py`
-  - `tcn` / `1dcnn` / `temporal_cnn`
-- `src/engagement_daisee/rnn/models/transformer.py`
-  - `transformer` / `tiny_transformer`
-- `src/engagement_daisee/rnn/models/builder.py`
-  - factory build model
+- `src/engagement_daisee/multiclass/`
+  - các pipeline 4-class mới
+  - `fusion_fixed_xgb.py`: model product
+  - `fusion_sweep_xgb.py`: chọn fusion theo validation
+  - `accuracy_targeted_xgb.py`: tune theo mục tiêu accuracy/balanced accuracy
+  - `inception_lite_experiment.py`: Inception-lite + XGBoost fusion
+  - `late_fusion.py`: late fusion nhiều nhánh
+  - `novel_models_4class.py`: các hướng model khác như ordinal / minirocket / deep forest
+  - `train_all.py`: train/eval toàn bộ model 4-class
 
-## 4) Script train+eval theo từng module (cùng tmux)
+- `src/engagement_daisee/rnn/`
+  - các model sequence gốc như `gru`, `tcn`, `tiny_transformer`, `hybrid`, `residual_bigru_attn`
 
-### 4.1 RNN train+eval
+- `src/engagement_daisee/ml/`
+  - tabular feature engineering và XGBoost/LightGBM baseline
 
-```bash
-./scripts/tmux_train_eval.sh rnn start \
-  --session rnn_te_p2 \
-  --manifest data/processed/runs/baseline_pipeline_features/feature_manifest.csv \
-  --run-id p2_tcn_01 \
-  --model tcn \
-  --device cuda \
-  --amp
-```
+- `src/engagement_daisee/cnn/`
+  - CNN baseline trên frame features
 
-### 4.2 ML train+eval
-
-```bash
-./scripts/tmux_train_eval.sh ml start \
-  --session ml_te_p2 \
-  --manifest data/processed/runs/baseline_pipeline_features/feature_manifest.csv \
-  --run-id p2_ml_01 \
-  --backend lightgbm \
-  --feature-mode tsfresh \
-  --cpu-workers 2
-```
-
-### 4.3 CNN train+eval
+## Chạy lại product model
 
 ```bash
-./scripts/tmux_train_eval.sh cnn start \
-  --session cnn_te_01 \
-  --manifest data/processed/cnn_frame_manifest.csv \
-  --run-id cnn_01 \
-  --model mobilenet_v3_small
+bash scripts/reproduce_product_4class.sh
 ```
 
-## 5) File JSON được lưu để so sánh
-
-Mỗi lần `train+eval` sẽ lưu trong thư mục run:
-- `checkpoints/runs/<module>_train_eval_<run_id>/train_eval_summary.json`
-- đồng thời append vào history:
-  - `checkpoints/reports/rnn_train_eval_history.jsonl`
-  - `checkpoints/reports/ml_train_eval_history.jsonl`
-  - `checkpoints/reports/cnn_train_eval_history.jsonl`
-
-## 6) Script tổng chạy qua đêm (1 tmux)
-
-Script:
-- `scripts/tmux_train_all.sh`
-
-Mặc định chạy tuần tự:
-- RNN: `gru gru_basic tcn tiny_transformer`
-- ML: bật
-- CNN: tắt mặc định (bật bằng `--with-cnn`)
-
-Ví dụ chạy qua đêm:
+## Chạy train/all cho 4-class
 
 ```bash
-./scripts/tmux_train_all.sh start \
-  --session nightly_all \
-  --run-id-prefix nightly_p2 \
-  --rnn-manifest data/processed/runs/baseline_pipeline_features/feature_manifest.csv \
-  --ml-manifest data/processed/runs/baseline_pipeline_features/feature_manifest.csv \
-  --device cuda
+bash scripts/tmux_train_all_4class.sh start
 ```
 
-Nếu muốn kèm CNN:
+Các script tmux khác cho 4-class:
+- `scripts/tmux_fusion_sweep_xgb_4class.sh`
+- `scripts/tmux_accuracy_targeted_xgb_4class.sh`
+- `scripts/tmux_inception_lite_ensemble_4class.sh`
+- `scripts/tmux_late_fusion_4class.sh`
+- `scripts/tmux_novel_models_4class.sh`
+
+## Report và latency
+
+Report đã thống nhất cách ghi:
+- `Model-side latency`: latency CPU sau khi đã có processed feature
+- `E2E latency`: latency trên processed feature sequence sample
+- `raw-video pipeline sample`: chỉ dùng cho benchmark paper Santoni/OpenFace
+
+Nếu cần so sánh với paper, xem:
+- `checkpoints/reports/bao_cao_ket_qua_huan_luyen_models.md`
+- `checkpoints/reports/GUIDE.md`
+
+## Hugging Face
+
+Artifact product đã được đóng gói dạng zip và đẩy lên:
+- `Hnug/daisee-processed`
+- remote path: `product_4class_fixed_triple_xgb/product_4class_fixed_triple_xgb.zip`
+
+## Dữ liệu raw
+
+Nếu cần re-extract:
 
 ```bash
-./scripts/tmux_train_all.sh start \
-  --session nightly_all_cnn \
-  --run-id-prefix nightly_full \
-  --with-cnn \
-  --cnn-manifest data/processed/cnn_frame_manifest.csv
+bash scripts/data/download_daisee.sh
 ```
 
-Kết quả tổng hợp:
-- `checkpoints/runs/train_all_<prefix>_<timestamp>/train_all_summary.json`
-- history:
-  - `checkpoints/reports/train_all_history.jsonl`
-
-## 7) Quản lý tmux
-
-Ví dụ với script tổng:
-
-```bash
-./scripts/tmux_train_all.sh status --session nightly_all
-./scripts/tmux_train_all.sh logs --session nightly_all
-./scripts/tmux_train_all.sh attach --session nightly_all
-./scripts/tmux_train_all.sh stop --session nightly_all
-```
-
-Tương tự cho `tmux_train_eval.sh rnn|ml|cnn`.
-
-## 8) Smoke test script trước khi chạy thật
-
-```bash
-./scripts/tmux_train_eval.sh rnn start --example --session ex_rnn_te
-./scripts/tmux_train_all.sh start --example --session ex_all
-```
-
-## 9) Tải lại raw dataset khi cần re-extract
-
-```bash
-./scripts/data/download_daisee.sh
-```
-
-Dataset raw sẽ vào đúng vị trí:
+Raw data sẽ nằm ở:
 - `data/raw/daisee/DAiSEE/`
