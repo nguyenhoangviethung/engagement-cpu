@@ -6,7 +6,7 @@ CONDA_ENV="thesis"
 WORKDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 LOG_DIR="$WORKDIR/logs"
 RUNS_CHECKPOINT_DIR="$WORKDIR/checkpoints/runs"
-REPORTS_DIR="$WORKDIR/checkpoints/reports"
+REPORTS_DIR="$WORKDIR/checkpoints/runs"
 
 COMMAND="start"
 RUN_ID=""
@@ -77,7 +77,7 @@ build_command() {
   local train_summary="$run_dir/engagement_xgb.summary.json"
   local eval_json="$run_dir/eval_${SPLIT}.json"
   local aggregate_json="$run_dir/train_eval_summary.json"
-  local history_jsonl="$REPORTS_DIR/ml_train_eval_history.jsonl"
+  local history_jsonl="$RUNS_CHECKPOINT_DIR/ml_train_eval_$active_run_id/history.jsonl"
   local run_log="$LOG_DIR/ml_train_eval_${active_run_id}_${timestamp}.log"
 
   local sample_flag=""

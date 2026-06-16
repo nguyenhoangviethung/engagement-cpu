@@ -1,0 +1,390 @@
+{
+  "status": "success",
+  "method": "minirocket_style_ridge",
+  "num_kernels": 128,
+  "selected_alpha": 100.0,
+  "validation_metrics": {
+    "accuracy": 0.489853044086774,
+    "balanced_accuracy": 0.27726527265272655,
+    "f1_macro": 0.2547203015543218,
+    "precision_macro": 0.2416188982197899,
+    "recall_macro": 0.27726527265272655,
+    "precision_per_class": [
+      0.0,
+      0.0,
+      0.5944517833553501,
+      0.37202380952380953
+    ],
+    "recall_per_class": [
+      0.0,
+      0.0,
+      0.5535055350553506,
+      0.5555555555555556
+    ],
+    "f1_per_class": [
+      0.0,
+      0.0,
+      0.5732484076433121,
+      0.44563279857397503
+    ],
+    "support_per_class": [
+      23,
+      143,
+      813,
+      450
+    ],
+    "confusion_matrix": [
+      [
+        0,
+        0,
+        18,
+        5
+      ],
+      [
+        0,
+        0,
+        89,
+        54
+      ],
+      [
+        0,
+        0,
+        450,
+        363
+      ],
+      [
+        0,
+        0,
+        200,
+        250
+      ]
+    ],
+    "cross_entropy": 1.1279119320344557
+  },
+  "test_video_metrics": {
+    "accuracy": 0.5347533632286996,
+    "balanced_accuracy": 0.2800453514739229,
+    "f1_macro": 0.27276292714070594,
+    "precision_macro": 0.2672924932896718,
+    "recall_macro": 0.2800453514739229,
+    "precision_per_class": [
+      0.0,
+      0.0,
+      0.5357492654260528,
+      0.5334207077326344
+    ],
+    "recall_per_class": [
+      0.0,
+      0.0,
+      0.6201814058956916,
+      0.5
+    ],
+    "f1_per_class": [
+      0.0,
+      0.0,
+      0.5748817656332107,
+      0.5161699429296132
+    ],
+    "support_per_class": [
+      4,
+      84,
+      882,
+      814
+    ],
+    "confusion_matrix": [
+      [
+        0,
+        0,
+        3,
+        1
+      ],
+      [
+        0,
+        0,
+        64,
+        20
+      ],
+      [
+        0,
+        0,
+        547,
+        335
+      ],
+      [
+        0,
+        0,
+        407,
+        407
+      ]
+    ],
+    "cross_entropy": 1.0636635524434885
+  },
+  "latency": {
+    "model_side": {
+      "variant": "rocket_ridge",
+      "latency_ms_mean": 0.10617393996653846,
+      "latency_ms_median": 0.10215399925073143,
+      "latency_ms_p95": 0.13134500113665126,
+      "latency_ms_min": 0.09486400085734203,
+      "latency_ms_max": 0.16216899894061498
+    },
+    "end_to_end": {
+      "variant": "rocket_ridge",
+      "latency_ms_mean": 9.197069319961884,
+      "latency_ms_median": 9.131082499152399,
+      "latency_ms_p95": 9.652771001128713,
+      "latency_ms_min": 8.753398000408197,
+      "latency_ms_max": 10.733728999184677
+    }
+  },
+  "candidates": [
+    {
+      "alpha": 0.1,
+      "validation_metrics": {
+        "accuracy": 0.489853044086774,
+        "balanced_accuracy": 0.27726527265272655,
+        "f1_macro": 0.2547124354492967,
+        "precision_macro": 0.24167728012453124,
+        "recall_macro": 0.27726527265272655,
+        "precision_per_class": [
+          0.0,
+          0.0,
+          0.5952380952380952,
+          0.37147102526002973
+        ],
+        "recall_per_class": [
+          0.0,
+          0.0,
+          0.5535055350553506,
+          0.5555555555555556
+        ],
+        "f1_per_class": [
+          0.0,
+          0.0,
+          0.5736137667304015,
+          0.4452359750667854
+        ],
+        "support_per_class": [
+          23,
+          143,
+          813,
+          450
+        ],
+        "confusion_matrix": [
+          [
+            0,
+            0,
+            18,
+            5
+          ],
+          [
+            0,
+            0,
+            88,
+            55
+          ],
+          [
+            0,
+            0,
+            450,
+            363
+          ],
+          [
+            0,
+            0,
+            200,
+            250
+          ]
+        ],
+        "cross_entropy": 1.1275819256491972
+      }
+    },
+    {
+      "alpha": 1.0,
+      "validation_metrics": {
+        "accuracy": 0.489853044086774,
+        "balanced_accuracy": 0.27726527265272655,
+        "f1_macro": 0.2547124354492967,
+        "precision_macro": 0.24167728012453124,
+        "recall_macro": 0.27726527265272655,
+        "precision_per_class": [
+          0.0,
+          0.0,
+          0.5952380952380952,
+          0.37147102526002973
+        ],
+        "recall_per_class": [
+          0.0,
+          0.0,
+          0.5535055350553506,
+          0.5555555555555556
+        ],
+        "f1_per_class": [
+          0.0,
+          0.0,
+          0.5736137667304015,
+          0.4452359750667854
+        ],
+        "support_per_class": [
+          23,
+          143,
+          813,
+          450
+        ],
+        "confusion_matrix": [
+          [
+            0,
+            0,
+            18,
+            5
+          ],
+          [
+            0,
+            0,
+            88,
+            55
+          ],
+          [
+            0,
+            0,
+            450,
+            363
+          ],
+          [
+            0,
+            0,
+            200,
+            250
+          ]
+        ],
+        "cross_entropy": 1.1276023762083578
+      }
+    },
+    {
+      "alpha": 10.0,
+      "validation_metrics": {
+        "accuracy": 0.48915325402379284,
+        "balanced_accuracy": 0.2769577695776958,
+        "f1_macro": 0.25438598482097463,
+        "precision_macro": 0.2414054670151512,
+        "recall_macro": 0.2769577695776958,
+        "precision_per_class": [
+          0.0,
+          0.0,
+          0.5947019867549669,
+          0.37091988130563797
+        ],
+        "recall_per_class": [
+          0.0,
+          0.0,
+          0.5522755227552275,
+          0.5555555555555556
+        ],
+        "f1_per_class": [
+          0.0,
+          0.0,
+          0.5727040816326531,
+          0.44483985765124556
+        ],
+        "support_per_class": [
+          23,
+          143,
+          813,
+          450
+        ],
+        "confusion_matrix": [
+          [
+            0,
+            0,
+            18,
+            5
+          ],
+          [
+            0,
+            0,
+            88,
+            55
+          ],
+          [
+            0,
+            0,
+            449,
+            364
+          ],
+          [
+            0,
+            0,
+            200,
+            250
+          ]
+        ],
+        "cross_entropy": 1.1276473020100215
+      }
+    },
+    {
+      "alpha": 100.0,
+      "validation_metrics": {
+        "accuracy": 0.489853044086774,
+        "balanced_accuracy": 0.27726527265272655,
+        "f1_macro": 0.2547203015543218,
+        "precision_macro": 0.2416188982197899,
+        "recall_macro": 0.27726527265272655,
+        "precision_per_class": [
+          0.0,
+          0.0,
+          0.5944517833553501,
+          0.37202380952380953
+        ],
+        "recall_per_class": [
+          0.0,
+          0.0,
+          0.5535055350553506,
+          0.5555555555555556
+        ],
+        "f1_per_class": [
+          0.0,
+          0.0,
+          0.5732484076433121,
+          0.44563279857397503
+        ],
+        "support_per_class": [
+          23,
+          143,
+          813,
+          450
+        ],
+        "confusion_matrix": [
+          [
+            0,
+            0,
+            18,
+            5
+          ],
+          [
+            0,
+            0,
+            89,
+            54
+          ],
+          [
+            0,
+            0,
+            450,
+            363
+          ],
+          [
+            0,
+            0,
+            200,
+            250
+          ]
+        ],
+        "cross_entropy": 1.1279119320344557
+      }
+    }
+  ],
+  "artifacts": {
+    "model": "checkpoints/runs/novel_models_4class/minirocket/model.joblib"
+  },
+  "note": "Dependency-free MiniROCKET-style PPV/max random convolution transform with a Ridge classifier."
+}

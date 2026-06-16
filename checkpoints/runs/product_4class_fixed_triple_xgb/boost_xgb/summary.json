@@ -1,0 +1,626 @@
+{
+  "status": "success",
+  "protocol": "validation_selected_xgboost_accuracy_sweep",
+  "manifest": "data/processed/runs/daisee_4class_final_dataset/feature_manifest.csv",
+  "feature_mode": "tsfresh",
+  "selection_objective": "validation_video_accuracy",
+  "selected": {
+    "config": {
+      "name": "unweighted_d7",
+      "weight_power": 0.0,
+      "max_depth": 7,
+      "min_child_weight": 4.0,
+      "gamma": 0.0
+    },
+    "rounds": 475,
+    "validation_metrics": {
+      "accuracy": 0.5374387683694891,
+      "balanced_accuracy": 0.2713858138581386,
+      "f1_macro": 0.2541160545860662,
+      "precision_macro": 0.24556489262371617,
+      "recall_macro": 0.2713858138581386,
+      "precision_per_class": [
+        0.0,
+        0.0,
+        0.5845004668534081,
+        0.39775910364145656
+      ],
+      "recall_per_class": [
+        0.0,
+        0.0,
+        0.7699876998769988,
+        0.31555555555555553
+      ],
+      "f1_per_class": [
+        0.0,
+        0.0,
+        0.6645435244161358,
+        0.35192069392812886
+      ],
+      "support_per_class": [
+        23,
+        143,
+        813,
+        450
+      ],
+      "confusion_matrix": [
+        [
+          0,
+          1,
+          18,
+          4
+        ],
+        [
+          0,
+          0,
+          119,
+          24
+        ],
+        [
+          0,
+          0,
+          626,
+          187
+        ],
+        [
+          0,
+          0,
+          308,
+          142
+        ]
+      ],
+      "cross_entropy": 1.056246267448115
+    }
+  },
+  "test_row_metrics": {
+    "accuracy": 0.8065161792505282,
+    "balanced_accuracy": 0.6711514399449245,
+    "f1_macro": 0.7463240832739524,
+    "precision_macro": 0.8933980025747995,
+    "recall_macro": 0.6711514399449245,
+    "precision_per_class": [
+      1.0,
+      0.9625,
+      0.7778679379247389,
+      0.8332240723744592
+    ],
+    "recall_per_class": [
+      0.5,
+      0.5480427046263345,
+      0.8662600248503333,
+      0.7703030303030303
+    ],
+    "f1_per_class": [
+      0.6666666666666666,
+      0.6984126984126984,
+      0.8196879008123129,
+      0.8005290672041318
+    ],
+    "support_per_class": [
+      40,
+      843,
+      8853,
+      8250
+    ],
+    "confusion_matrix": [
+      [
+        20,
+        4,
+        10,
+        6
+      ],
+      [
+        0,
+        462,
+        291,
+        90
+      ],
+      [
+        0,
+        8,
+        7669,
+        1176
+      ],
+      [
+        0,
+        6,
+        1889,
+        6355
+      ]
+    ],
+    "cross_entropy": 0.5451230350272696
+  },
+  "test_video_metrics": {
+    "accuracy": 0.875560538116592,
+    "balanced_accuracy": 0.7097425579568436,
+    "f1_macro": 0.7867006140386791,
+    "precision_macro": 0.9394984445570392,
+    "recall_macro": 0.7097425579568436,
+    "precision_per_class": [
+      1.0,
+      1.0,
+      0.8344965104685942,
+      0.9234972677595629
+    ],
+    "recall_per_class": [
+      0.5,
+      0.5595238095238095,
+      0.9489795918367347,
+      0.8304668304668305
+    ],
+    "f1_per_class": [
+      0.6666666666666666,
+      0.7175572519083969,
+      0.8880636604774536,
+      0.8745148771021992
+    ],
+    "support_per_class": [
+      4,
+      84,
+      882,
+      814
+    ],
+    "confusion_matrix": [
+      [
+        2,
+        0,
+        1,
+        1
+      ],
+      [
+        0,
+        47,
+        27,
+        10
+      ],
+      [
+        0,
+        0,
+        837,
+        45
+      ],
+      [
+        0,
+        0,
+        138,
+        676
+      ]
+    ],
+    "cross_entropy": 0.4972292023766202
+  },
+  "latency": {
+    "latency_kind": "processed_feature_sequence",
+    "sample_feature_path": "data/processed/runs/baseline_pipeline_features/features/5000441001_seg0000.npy",
+    "model_side": {
+      "variant": "accuracy_boost_xgboost",
+      "latency_ms_mean": 0.8978250350446615,
+      "latency_ms_median": 0.8798804992693476,
+      "latency_ms_p95": 0.9747080002853181,
+      "latency_ms_min": 0.8391920018766541,
+      "latency_ms_max": 1.1879209996550344
+    },
+    "end_to_end": {
+      "variant": "accuracy_boost_xgboost",
+      "latency_ms_mean": 4.497967544994026,
+      "latency_ms_median": 4.474210001717438,
+      "latency_ms_p95": 4.741834000014933,
+      "latency_ms_min": 4.261148998921271,
+      "latency_ms_max": 4.953009996825131
+    }
+  },
+  "artifacts": {
+    "model": "checkpoints/runs/accuracy_boost_xgb_4class_20260616_041407/model.json",
+    "preprocessor": "checkpoints/runs/accuracy_boost_xgb_4class_20260616_041407/preprocessor.npz"
+  },
+  "candidates": [
+    {
+      "config": {
+        "name": "unweighted_d4",
+        "weight_power": 0.0,
+        "max_depth": 4,
+        "min_child_weight": 3.0,
+        "gamma": 0.0
+      },
+      "selected_rounds": 325,
+      "validation_metrics": {
+        "accuracy": 0.5262421273617914,
+        "balanced_accuracy": 0.2731631816318163,
+        "f1_macro": 0.2572879828028569,
+        "precision_macro": 0.24510530825142168,
+        "recall_macro": 0.2731631816318163,
+        "precision_per_class": [
+          0.0,
+          0.0,
+          0.5818363273453094,
+          0.39858490566037735
+        ],
+        "recall_per_class": [
+          0.0,
+          0.0,
+          0.7170971709717097,
+          0.37555555555555553
+        ],
+        "f1_per_class": [
+          0.0,
+          0.0,
+          0.6424242424242425,
+          0.38672768878718533
+        ],
+        "support_per_class": [
+          23,
+          143,
+          813,
+          450
+        ],
+        "confusion_matrix": [
+          [
+            0,
+            1,
+            17,
+            5
+          ],
+          [
+            0,
+            0,
+            123,
+            20
+          ],
+          [
+            0,
+            0,
+            583,
+            230
+          ],
+          [
+            0,
+            2,
+            279,
+            169
+          ]
+        ],
+        "cross_entropy": 1.004137707159971
+      }
+    },
+    {
+      "config": {
+        "name": "unweighted_d5",
+        "weight_power": 0.0,
+        "max_depth": 5,
+        "min_child_weight": 3.0,
+        "gamma": 0.0
+      },
+      "selected_rounds": 775,
+      "validation_metrics": {
+        "accuracy": 0.5332400279916025,
+        "balanced_accuracy": 0.2749979499794998,
+        "f1_macro": 0.2588572267920094,
+        "precision_macro": 0.247814009280596,
+        "recall_macro": 0.2749979499794998,
+        "precision_per_class": [
+          0.0,
+          0.0,
+          0.5822784810126582,
+          0.4089775561097257
+        ],
+        "recall_per_class": [
+          0.0,
+          0.0,
+          0.7355473554735548,
+          0.36444444444444446
+        ],
+        "f1_per_class": [
+          0.0,
+          0.0,
+          0.65,
+          0.3854289071680376
+        ],
+        "support_per_class": [
+          23,
+          143,
+          813,
+          450
+        ],
+        "confusion_matrix": [
+          [
+            0,
+            1,
+            18,
+            4
+          ],
+          [
+            0,
+            0,
+            125,
+            18
+          ],
+          [
+            0,
+            0,
+            598,
+            215
+          ],
+          [
+            0,
+            0,
+            286,
+            164
+          ]
+        ],
+        "cross_entropy": 1.0414827257872543
+      }
+    },
+    {
+      "config": {
+        "name": "unweighted_d6",
+        "weight_power": 0.0,
+        "max_depth": 6,
+        "min_child_weight": 3.0,
+        "gamma": 0.0
+      },
+      "selected_rounds": 800,
+      "validation_metrics": {
+        "accuracy": 0.5255423372988104,
+        "balanced_accuracy": 0.26863878638786387,
+        "f1_macro": 0.2522022390606517,
+        "precision_macro": 0.24127261926970317,
+        "recall_macro": 0.26863878638786387,
+        "precision_per_class": [
+          0.0,
+          0.0,
+          0.5793036750483559,
+          0.38578680203045684
+        ],
+        "recall_per_class": [
+          0.0,
+          0.0,
+          0.7367773677736777,
+          0.3377777777777778
+        ],
+        "f1_per_class": [
+          0.0,
+          0.0,
+          0.6486193827828912,
+          0.36018957345971564
+        ],
+        "support_per_class": [
+          23,
+          143,
+          813,
+          450
+        ],
+        "confusion_matrix": [
+          [
+            0,
+            1,
+            18,
+            4
+          ],
+          [
+            0,
+            0,
+            119,
+            24
+          ],
+          [
+            0,
+            0,
+            599,
+            214
+          ],
+          [
+            0,
+            0,
+            298,
+            152
+          ]
+        ],
+        "cross_entropy": 1.0762161473233722
+      }
+    },
+    {
+      "config": {
+        "name": "unweighted_d7",
+        "weight_power": 0.0,
+        "max_depth": 7,
+        "min_child_weight": 4.0,
+        "gamma": 0.0
+      },
+      "selected_rounds": 475,
+      "validation_metrics": {
+        "accuracy": 0.5374387683694891,
+        "balanced_accuracy": 0.2713858138581386,
+        "f1_macro": 0.2541160545860662,
+        "precision_macro": 0.24556489262371617,
+        "recall_macro": 0.2713858138581386,
+        "precision_per_class": [
+          0.0,
+          0.0,
+          0.5845004668534081,
+          0.39775910364145656
+        ],
+        "recall_per_class": [
+          0.0,
+          0.0,
+          0.7699876998769988,
+          0.31555555555555553
+        ],
+        "f1_per_class": [
+          0.0,
+          0.0,
+          0.6645435244161358,
+          0.35192069392812886
+        ],
+        "support_per_class": [
+          23,
+          143,
+          813,
+          450
+        ],
+        "confusion_matrix": [
+          [
+            0,
+            1,
+            18,
+            4
+          ],
+          [
+            0,
+            0,
+            119,
+            24
+          ],
+          [
+            0,
+            0,
+            626,
+            187
+          ],
+          [
+            0,
+            0,
+            308,
+            142
+          ]
+        ],
+        "cross_entropy": 1.056246267448115
+      }
+    },
+    {
+      "config": {
+        "name": "mild_weight_d5",
+        "weight_power": 0.25,
+        "max_depth": 5,
+        "min_child_weight": 3.0,
+        "gamma": 0.0
+      },
+      "selected_rounds": 550,
+      "validation_metrics": {
+        "accuracy": 0.5290412876137159,
+        "balanced_accuracy": 0.2726092603583379,
+        "f1_macro": 0.2584555344457037,
+        "precision_macro": 0.28663278476928045,
+        "recall_macro": 0.2726092603583379,
+        "precision_per_class": [
+          0.0,
+          0.16666666666666666,
+          0.579864472410455,
+          0.4
+        ],
+        "recall_per_class": [
+          0.0,
+          0.006993006993006993,
+          0.7367773677736777,
+          0.3466666666666667
+        ],
+        "f1_per_class": [
+          0.0,
+          0.013422818791946308,
+          0.6489707475622969,
+          0.37142857142857144
+        ],
+        "support_per_class": [
+          23,
+          143,
+          813,
+          450
+        ],
+        "confusion_matrix": [
+          [
+            0,
+            3,
+            17,
+            3
+          ],
+          [
+            0,
+            1,
+            125,
+            17
+          ],
+          [
+            0,
+            0,
+            599,
+            214
+          ],
+          [
+            0,
+            2,
+            292,
+            156
+          ]
+        ],
+        "cross_entropy": 0.999670206897852
+      }
+    },
+    {
+      "config": {
+        "name": "sqrt_weight_d5",
+        "weight_power": 0.5,
+        "max_depth": 5,
+        "min_child_weight": 3.0,
+        "gamma": 0.0
+      },
+      "selected_rounds": 700,
+      "validation_metrics": {
+        "accuracy": 0.523442967109867,
+        "balanced_accuracy": 0.2745190479876827,
+        "f1_macro": 0.2643684681764152,
+        "precision_macro": 0.2792515108691579,
+        "recall_macro": 0.2745190479876827,
+        "precision_per_class": [
+          0.0,
+          0.13636363636363635,
+          0.5835835835835835,
+          0.39705882352941174
+        ],
+        "recall_per_class": [
+          0.0,
+          0.02097902097902098,
+          0.7170971709717097,
+          0.36
+        ],
+        "f1_per_class": [
+          0.0,
+          0.03636363636363636,
+          0.6434878587196468,
+          0.3776223776223776
+        ],
+        "support_per_class": [
+          23,
+          143,
+          813,
+          450
+        ],
+        "confusion_matrix": [
+          [
+            0,
+            5,
+            15,
+            3
+          ],
+          [
+            0,
+            3,
+            120,
+            20
+          ],
+          [
+            0,
+            7,
+            583,
+            223
+          ],
+          [
+            0,
+            7,
+            281,
+            162
+          ]
+        ],
+        "cross_entropy": 0.9990070770975618
+      }
+    }
+  ],
+  "note": "Candidate and boosting-round selection used validation only; test was evaluated once after selection."
+}

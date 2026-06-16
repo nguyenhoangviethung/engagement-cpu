@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-WORKDIR="/home/bear/engagement-cpu"
+WORKDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../.."
 ENV_NAME="thesis"
 RUN_ID="${RUN_ID:-goal70_shift_calibrated_$(date +%Y%m%d_%H%M%S)}"
 RUN_ROOT="$WORKDIR/checkpoints/runs/$RUN_ID"

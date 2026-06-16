@@ -1,0 +1,21 @@
+=== product 4-class reproduction started ===
+2026-06-16 16:48:56 | INFO | Loading probabilities for final_xgb
+2026-06-16 16:49:05 | INFO | Loaded 5000/14290 feature rows
+2026-06-16 16:49:12 | INFO | Loaded 10000/14290 feature rows
+2026-06-16 16:49:27 | INFO | Loaded 5000/17986 feature rows
+2026-06-16 16:49:35 | INFO | Loaded 10000/17986 feature rows
+2026-06-16 16:49:43 | INFO | Loaded 15000/17986 feature rows
+2026-06-16 16:49:49 | INFO | Loading probabilities for boost_xgb
+2026-06-16 16:49:57 | INFO | Loaded 5000/14290 feature rows
+2026-06-16 16:50:04 | INFO | Loaded 10000/14290 feature rows
+2026-06-16 16:50:20 | INFO | Loaded 5000/17986 feature rows
+2026-06-16 16:50:27 | INFO | Loaded 10000/17986 feature rows
+2026-06-16 16:50:34 | INFO | Loaded 15000/17986 feature rows
+2026-06-16 16:50:41 | INFO | Loading probabilities for targeted_xgb
+2026-06-16 16:50:49 | INFO | Loaded 5000/14290 feature rows
+2026-06-16 16:50:56 | INFO | Loaded 10000/14290 feature rows
+2026-06-16 16:51:10 | INFO | Loaded 5000/17986 feature rows
+2026-06-16 16:51:17 | INFO | Loaded 10000/17986 feature rows
+2026-06-16 16:51:24 | INFO | Loaded 15000/17986 feature rows
+2026-06-16 16:51:34 | INFO | [fixed-fusion] test_acc=0.7601 test_bal=0.7998 test_f1=0.7734
+=== product 4-class reproduction finished ===

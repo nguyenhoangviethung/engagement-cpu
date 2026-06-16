@@ -217,7 +217,7 @@ for dim in $RNN_DIMS; do
   done
 done
 
-SUMMARY_OUT="$RUN_ROOT/openface709_summary.json" HISTORY_OUT="$WORKDIR/checkpoints/reports/openface709_history.jsonl" RESULTS="$RESULTS" RUN_ID="$RUN_ID" PROCESSED_ROOT="$PROCESSED_ROOT" RUN_ROOT="$RUN_ROOT" run_py python - <<'PY'
+SUMMARY_OUT="$RUN_ROOT/openface709_summary.json" HISTORY_OUT="$RUN_ROOT/openface709_history.jsonl" RESULTS="$RESULTS" RUN_ID="$RUN_ID" PROCESSED_ROOT="$PROCESSED_ROOT" RUN_ROOT="$RUN_ROOT" run_py python - <<'PY'
 import json, os
 from pathlib import Path
 results=Path(os.environ['RESULTS'])

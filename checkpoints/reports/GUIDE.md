@@ -1,27 +1,50 @@
-# GUIDE: Production inference cho tat ca model
+# GUIDE: Production inference cho model DAiSEE 4-class
 
-Tai lieu nay dung cho production/devops khi can lay artifact hien co va chay infer. Tat ca duong dan ben duoi la duong dan trong repo sau khi da doi ten run folder cho ro nghia.
+Tai lieu nay dung cho production/devops khi can reproduce va deploy model DAiSEE 4-class hien tai.
 
-## 1. Chon model
+## 1. Model product nen dung
 
-| Muc dich | Model nen dung | Ly do |
-|---|---|---|
-| Accuracy/F1 tot nhat | `late_fusion_gru_tcn_xgb` | Ensemble GRU + TCN + XGBoost, Accuracy 75.95%, F1 macro 73.86% |
-| Single model co balanced accuracy cao nhat | `gru` | Test Balanced Accuracy 77.35% |
-| Single model moi tot nhat | `residual_bigru_attn` | Balanced Accuracy 73.76%, Accuracy 72.03% |
-| CPU don gian, model-side latency thap | `xgboost` | Model-side latency khoang 0.48 ms |
-| Neural latency nhe hon | `cnn_gru_fusion` | Model-side latency khoang 8.96 ms |
+| Muc dich | Model | Ly do |
+| :--- | :--- | :--- |
+| Product mac dinh | `fixed_triple_xgb_fusion` | Accuracy 76.01%, Balanced Accuracy 79.98%, F1 Macro 77.34%, model-side latency mean 11.42 ms tren CPU. |
+| CPU sieu nhe baseline | `xgboost_final` | Accuracy 73.82%, Balanced Accuracy 76.35%, model-side latency mean 0.94 ms. |
+| Accuracy-only reference | `accuracy_boost_xgb` | Accuracy 87.56%, nhung Balanced Accuracy 70.97%; chi nen dung lam ablation/reference. |
+
+Product model hien tai:
+
+```text
+fixed_triple_xgb_fusion
+feature_mode = tsfresh
+weights = final_xgb:0.84 + boost_xgb:0.14 + targeted_xgb:0.02
+bias_power = 0.42
+temperature = 1.15
+prediction = argmax(probabilities_4class)
+```
+
+Report verify:
+
+```text
+checkpoints/runs/product_4class_fixed_triple_xgb/summary.json
+```
+
+Config reproduce:
+
+```text
+checkpoints/runs/product_4class_fixed_triple_xgb/reproduction_config.json
+```
 
 ## 2. Input contract
 
-Model production trong bao cao khong nhan video tho truc tiep. Pipeline can tach thanh:
+Model product khong nhan video tho truc tiep. Pipeline production can tach thanh:
 
-1. Video/frame stream -> MediaPipe FaceMesh features
-2. Features -> window/sequence `.npy`
-3. Sequence `.npy` -> model probability
-4. Apply threshold -> prediction
+1. Video/frame stream -> face/landmark feature extraction.
+2. Feature rows -> sequence/window `.npy`.
+3. Sequence/window -> tabular `tsfresh` feature.
+4. Ba XGBoost component predict 4-class probability.
+5. Weighted probability fusion + class-bias + temperature calibration.
+6. `argmax` -> class id `0`, `1`, `2`, hoac `3`.
 
-Shape dau vao chuan cho RNN/TCN/hybrid:
+Input sequence:
 
 ```text
 (T, F) hoac (B, T, F)
@@ -29,192 +52,106 @@ T = 30
 F = 90
 ```
 
-XGBoost cung nhan sequence `.npy`, sau do `ml.infer` tu chuyen sequence sang tabular feature bang `feature-mode tsfresh`.
-
-CNN baseline la ngoai le: no nhan anh/frame RGB truc tiep, khong phai sequence.
-
-Luu y manifest tren disk dung cot `partition` cho train/validation/test. Cac CLI van giu tham so `--split` de tuong thich voi code train/evaluate hien co.
-
-## 3. Artifact va threshold
-
-| Model | Artifact | Threshold | Ghi chu |
-|---|---|---:|---|
-| `gru` | `checkpoints/runs/final_rnn_temporal_models_20260529/rnn_gru/engagement_gru.pt` | 0.63 | Best single-model balanced accuracy |
-| `tcn` | `checkpoints/runs/final_rnn_temporal_models_20260529/rnn_tcn/engagement_tcn.pt` | 0.61 | Nen dung trong late fusion |
-| `gru_basic` | `checkpoints/runs/final_rnn_temporal_models_20260529/rnn_gru_basic/engagement_gru_basic.pt` | 0.61 | Baseline RNN nhe |
-| `tiny_transformer` | `checkpoints/runs/final_rnn_temporal_models_20260529/rnn_tiny_transformer/engagement_tiny_transformer.pt` | 0.55 | Baseline transformer |
-| `xgboost` | `checkpoints/runs/final_xgboost_tsfresh_20260529/engagement_xgb.json` | 0.49 | Can them summary/preprocess |
-| `cnn_gru_fusion` | `checkpoints/runs/evolved_rnn_hybrid_models_20260608/rnn_cnn_gru_fusion/engagement_cnn_gru_fusion.pt` | 0.64 | Hybrid 1D-CNN + GRU |
-| `residual_bigru_attn` | `checkpoints/runs/evolved_rnn_hybrid_models_20260608/rnn_residual_bigru_attn/engagement_residual_bigru_attn.pt` | 0.55 | Residual BiGRU + attention |
-| `late_fusion_gru_tcn_xgb` | `checkpoints/reports/late_fusion_gru_tcn_xgb_report.json` | 0.54 | Fuse prob: 0.30 GRU + 0.30 TCN + 0.40 XGBoost |
-| `cnn_efficientnet_b0` | `checkpoints/runs/train_all_phase34_20260523_030236/cnn/engagement_cnn.pt` | 0.19 | Frame-based baseline, khong khuyen nghi lam model chinh |
-
-XGBoost can them:
+Label output:
 
 ```text
-checkpoints/runs/final_xgboost_tsfresh_20260529/engagement_xgb.summary.json
-checkpoints/runs/final_xgboost_tsfresh_20260529/engagement_xgb.preprocess.npz
+0, 1, 2, 3
 ```
 
-## 4. Infer RNN/TCN/hybrid
+Trong service response nen map id sang ten lop theo mapping cua dataset goc neu UI/product can label text.
 
-Checkpoint `.pt` la training checkpoint. Khi deploy CPU, nen convert sang TorchScript truoc.
+## 3. Artifact product
 
-Vi du convert GRU:
+| Component | Model artifact | Preprocessor |
+| :--- | :--- | :--- |
+| `final_xgb` | `checkpoints/runs/product_4class_fixed_triple_xgb/final_xgb/model.json` | `checkpoints/runs/product_4class_fixed_triple_xgb/final_xgb/preprocessor.npz` |
+| `boost_xgb` | `checkpoints/runs/product_4class_fixed_triple_xgb/boost_xgb/model.json` | `checkpoints/runs/product_4class_fixed_triple_xgb/boost_xgb/preprocessor.npz` |
+| `targeted_xgb` | `checkpoints/runs/product_4class_fixed_triple_xgb/targeted_xgb/model.json` | `checkpoints/runs/product_4class_fixed_triple_xgb/targeted_xgb/preprocessor.npz` |
 
-```bash
-PYTHONPATH=src python3 -m engagement_daisee.rnn.optimize_inference \
-  --checkpoint checkpoints/runs/final_rnn_temporal_models_20260529/rnn_gru/engagement_gru.pt \
-  --output-dir checkpoints/deploy/gru_final \
-  --cpu-threads 2 \
-  --benchmark-iters 200
-```
-
-Lenh nay tao:
+Dataset manifest product:
 
 ```text
-checkpoints/deploy/gru_final/engagement_fp32.ts
-checkpoints/deploy/gru_final/engagement_int8_dynamic.ts
-checkpoints/deploy/gru_final/inference_meta.json
+data/processed/runs/daisee_4class_final_dataset/feature_manifest.csv
 ```
 
-Infer mot sequence:
-
-```bash
-PYTHONPATH=src python3 -m engagement_daisee.rnn.infer \
-  --artifact checkpoints/deploy/gru_final/engagement_int8_dynamic.ts \
-  --meta checkpoints/deploy/gru_final/inference_meta.json \
-  --sequence /path/to/window.npy \
-  --cpu-threads 2
-```
-
-Dung cung quy trinh tren cho:
-
-```text
-tcn
-gru_basic
-tiny_transformer
-cnn_gru_fusion
-residual_bigru_attn
-```
-
-Chi can doi `--checkpoint` va `--output-dir`.
-
-Neu can evaluate truc tiep checkpoint `.pt` tren manifest:
-
-```bash
-PYTHONPATH=src python3 -m engagement_daisee.rnn.evaluate \
-  --manifest data/processed/runs/daisee_binary_final_dataset/feature_manifest.csv \
-  --checkpoint checkpoints/runs/final_rnn_temporal_models_20260529/rnn_gru/engagement_gru.pt \
-  --split test \
-  --threshold 0.63 \
-  --aggregation video
-```
-
-## 5. Infer XGBoost
-
-```bash
-PYTHONPATH=src python3 -m engagement_daisee.ml.infer \
-  --model checkpoints/runs/final_xgboost_tsfresh_20260529/engagement_xgb.json \
-  --summary-json checkpoints/runs/final_xgboost_tsfresh_20260529/engagement_xgb.summary.json \
-  --sequence /path/to/window.npy \
-  --feature-mode tsfresh
-```
-
-Output co dang:
-
-```json
-{
-  "model": ".../engagement_xgb.json",
-  "sequence": ".../window.npy",
-  "backend": "xgboost",
-  "feature_mode": "tsfresh",
-  "threshold": 0.49,
-  "probability": 0.0,
-  "prediction": 0
-}
-```
-
-## 6. Infer late-fusion ensemble
-
-Late-fusion hien chua co CLI single-window rieng. Production can tinh 3 xac suat rieng roi fuse:
+## 4. Fixed fusion formula
 
 ```python
-p_final = (0.30 * p_gru) + (0.30 * p_tcn) + (0.40 * p_xgb)
-prediction = int(p_final >= 0.54)
+prob = (
+    0.84 * prob_final_xgb
+    + 0.14 * prob_boost_xgb
+    + 0.02 * prob_targeted_xgb
+)
+
+prob = apply_class_bias(prob, bias_power=0.42)
+prob = temperature_calibration(prob, temperature=1.15)
+prediction = int(prob.argmax(axis=-1))
 ```
 
-Artifact can doc de lay weights/metrics:
+Trong code da co evaluator fixed-only:
 
 ```text
-checkpoints/reports/late_fusion_gru_tcn_xgb_report.json
+src/engagement_daisee/multiclass/fusion_fixed_xgb.py
 ```
 
-Thanh phan ensemble:
+## 5. Verify product model
 
-```text
-GRU:     checkpoints/runs/final_rnn_temporal_models_20260529/rnn_gru/engagement_gru.pt
-TCN:     checkpoints/runs/final_rnn_temporal_models_20260529/rnn_tcn/engagement_tcn.pt
-XGBoost: checkpoints/runs/final_xgboost_tsfresh_20260529/engagement_xgb.json
-```
-
-Khuyen nghi deploy:
-
-1. Convert GRU va TCN sang TorchScript bang `rnn.optimize_inference`.
-2. Chay GRU infer lay `p_gru`.
-3. Chay TCN infer lay `p_tcn`.
-4. Chay XGBoost infer lay `p_xgb`.
-5. Tinh `p_final` theo cong thuc tren.
-6. Tra ve threshold `0.54` va weights trong response de trace.
-
-## 7. Infer CNN baseline
-
-CNN baseline nhan anh RGB, phu hop lam baseline frame-level hon la model chinh.
+Chay lenh sau de kiem chung lai metric product, khong dung metric-window search:
 
 ```bash
-PYTHONPATH=src python3 -m engagement_daisee.cnn.infer \
-  --checkpoint checkpoints/runs/train_all_phase34_20260523_030236/cnn/engagement_cnn.pt \
-  --image /path/to/frame.jpg \
-  --threshold 0.19
+bash scripts/reproduce_product_4class.sh
 ```
 
-Output co `probability`, `prediction`, `model_name`, `image_size`.
+Ket qua ky vong tren test:
 
-## 8. Service response nen co
+| Metric | Value |
+| :--- | ---: |
+| Accuracy | 76.01% |
+| Balanced Accuracy | 79.98% |
+| F1 Macro | 77.34% |
+| Precision Macro | 78.44% |
+| Recall Macro | 79.98% |
+| Model-side latency mean | 11.42 ms |
+| Model-side latency P95 | 11.82 ms |
 
-Moi response production nen log toi thieu:
+## 6. Service response nen co
+
+Product response nen tra ve probability 4 lop va class id du doan.
 
 ```json
 {
-  "model_name": "late_fusion_gru_tcn_xgb",
-  "model_version": "20260608",
-  "threshold": 0.54,
-  "probability": 0.0,
-  "prediction": 0,
-  "window_start_ms": 0,
-  "window_end_ms": 0,
-  "input_shape": [30, 90]
-}
-```
-
-Voi late fusion, nen them:
-
-```json
-{
-  "components": {
-    "gru": 0.0,
-    "tcn": 0.0,
-    "xgboost": 0.0
-  },
-  "weights": {
-    "gru": 0.30,
-    "tcn": 0.30,
-    "xgboost": 0.40
+  "model_name": "fixed_triple_xgb_fusion",
+  "model_version": "product_4class_fixed_triple_xgb",
+  "label_space": "daisee_4class",
+  "prediction": 3,
+  "probabilities": [0.01, 0.04, 0.22, 0.73],
+  "input_shape": [30, 90],
+  "feature_mode": "tsfresh",
+  "fusion": {
+    "weights": {
+      "final_xgb": 0.84,
+      "boost_xgb": 0.14,
+      "targeted_xgb": 0.02
+    },
+    "bias_power": 0.42,
+    "temperature": 1.15
   }
 }
 ```
 
-## 9. Fallback va loi production
+Neu can trace/debug, them probability cua tung component:
+
+```json
+{
+  "components": {
+    "final_xgb": [0.01, 0.05, 0.21, 0.73],
+    "boost_xgb": [0.02, 0.02, 0.30, 0.66],
+    "targeted_xgb": [0.04, 0.10, 0.25, 0.61]
+  }
+}
+```
+
+## 7. Fallback va loi production
 
 Can xu ly cac truong hop:
 
@@ -222,18 +159,33 @@ Can xu ly cac truong hop:
 - Sequence ngan hon 30 frame.
 - Feature co NaN/Inf.
 - Shape khong phai `(30, 90)` hoac `(B, 30, 90)`.
-- File `.ts` khong di kem `inference_meta.json`.
-- XGBoost thieu `summary.json` hoac `preprocess.npz`.
+- Thieu model artifact `.json`.
+- Thieu `preprocessor.npz`.
+- Feature schema khong khop voi `feature_mode=tsfresh`.
 
 Fallback goi y:
 
-- Neu khong du frame: tra ve `prediction = null`, `probability = null`, `reason = "insufficient_sequence"`.
+- Neu khong du frame: tra ve `prediction = null`, `probabilities = null`, `reason = "insufficient_sequence"`.
 - Neu khong detect face: tra ve `reason = "face_not_detected"`.
 - Neu co NaN/Inf: replace bang 0 sau normalize hoac reject window, nhung phai log.
+- Neu mot component model loi: khong nen silently fallback sang model khac; tra loi loi co trace id.
 
-## 10. Tai lieu lien quan
+## 8. Latency notes
 
-- Report chinh: `checkpoints/reports/bao_cao_ket_qua_huan_luyen_models.md`
-- Latency model-side: `checkpoints/reports/latency_benchmark_models.csv`
-- Latency raw-video-to-prediction: `checkpoints/reports/end_to_end_latency_benchmark.csv`
-- Late fusion metrics: `checkpoints/reports/late_fusion_gru_tcn_xgb_report.json`
+Latency product hien co:
+
+| Model | Latency kind | Mean | Median | P95 | Min | Max |
+| :--- | :--- | ---: | ---: | ---: | ---: | ---: |
+| `fixed_triple_xgb_fusion` | model-side processed feature sequence | 11.42 ms | 11.41 ms | 11.82 ms | 10.90 ms | 12.06 ms |
+| `xgboost_final` | model-side processed feature sequence | 0.94 ms | - | 1.02 ms | - | - |
+| `accuracy_boost_xgb` | model-side processed feature sequence | 0.90 ms | 0.88 ms | 0.97 ms | 0.84 ms | 1.19 ms |
+| `accuracy_targeted_xgb` | model-side processed feature sequence | 0.79 ms | 0.78 ms | 0.84 ms | 0.75 ms | 1.18 ms |
+
+Neu can so sanh raw-video end-to-end, phai do them pipeline video -> face landmarks -> feature -> model tren cung may. Khong lay model-side latency de thay cho latency raw-video.
+
+## 9. Tai lieu lien quan
+
+- Bao cao chinh 4-class: `checkpoints/reports/bao_cao_ket_qua_huan_luyen_models.md`
+- Product fixed report: `checkpoints/runs/product_4class_fixed_triple_xgb/summary.json`
+- Product reproduce config: `checkpoints/runs/product_4class_fixed_triple_xgb/reproduction_config.json`
+- Validation-selected fusion: `checkpoints/runs/fusion_sweep_xgb_4class/summary.json`
