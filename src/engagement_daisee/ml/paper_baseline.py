@@ -249,8 +249,6 @@ def run_paper_baseline(
             "validation": int(val_df["video_id"].nunique()),
             "test": int(test_df["video_id"].nunique()),
         },
-        "validation_row_metrics": val_row_metrics,
-        "validation_video_metrics": val_video_metrics,
         "test_row_metrics": test_row_metrics,
         "test_video_metrics": test_video_metrics,
         "model_path": str(model_path),

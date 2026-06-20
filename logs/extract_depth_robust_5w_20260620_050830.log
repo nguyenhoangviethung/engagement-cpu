@@ -1,0 +1,69 @@
+=== Parallel depth-robust extraction started at Sat Jun 20 05:08:30 UTC 2026 ===
+Run ID: depth_robust_5w_20260620_050830
+Workers: 5
+Output: /home/bear/engagement-cpu/data/processed/runs/extract_depth_robust_5w_20260620_050830
+[worker-3] 2026-06-20 05:08:31 | INFO | Starting feature extraction
+[worker-3] 2026-06-20 05:08:31 | INFO | Config | labels=/home/bear/engagement-cpu/data/processed/runs/daisee_4class_final_dataset/video_labels_4class.csv | videos=/home/bear/engagement-cpu/data/raw/daisee/DAiSEE/DataSet | features=/home/bear/engagement-cpu/data/processed/runs/extract_depth_robust_5w_20260620_050830/shard_3/features | manifest=/home/bear/engagement-cpu/data/processed/runs/extract_depth_robust_5w_20260620_050830/shard_3/feature_manifest.csv | sample=False | seed=42 | frame_stride=1 | max_frames=0 | resize_width=0 | feature_set=depth_robust | temporal_enrichment=velocity_std | label_mode=four_class | shard=3/5 | output_dim=300
+[worker-4] 2026-06-20 05:08:31 | INFO | Starting feature extraction
+[worker-4] 2026-06-20 05:08:31 | INFO | Config | labels=/home/bear/engagement-cpu/data/processed/runs/daisee_4class_final_dataset/video_labels_4class.csv | videos=/home/bear/engagement-cpu/data/raw/daisee/DAiSEE/DataSet | features=/home/bear/engagement-cpu/data/processed/runs/extract_depth_robust_5w_20260620_050830/shard_4/features | manifest=/home/bear/engagement-cpu/data/processed/runs/extract_depth_robust_5w_20260620_050830/shard_4/feature_manifest.csv | sample=False | seed=42 | frame_stride=1 | max_frames=0 | resize_width=0 | feature_set=depth_robust | temporal_enrichment=velocity_std | label_mode=four_class | shard=4/5 | output_dim=300
+[worker-1] 2026-06-20 05:08:31 | INFO | Starting feature extraction
+[worker-1] 2026-06-20 05:08:31 | INFO | Config | labels=/home/bear/engagement-cpu/data/processed/runs/daisee_4class_final_dataset/video_labels_4class.csv | videos=/home/bear/engagement-cpu/data/raw/daisee/DAiSEE/DataSet | features=/home/bear/engagement-cpu/data/processed/runs/extract_depth_robust_5w_20260620_050830/shard_1/features | manifest=/home/bear/engagement-cpu/data/processed/runs/extract_depth_robust_5w_20260620_050830/shard_1/feature_manifest.csv | sample=False | seed=42 | frame_stride=1 | max_frames=0 | resize_width=0 | feature_set=depth_robust | temporal_enrichment=velocity_std | label_mode=four_class | shard=1/5 | output_dim=300
+[worker-0] 2026-06-20 05:08:31 | INFO | Starting feature extraction
+[worker-0] 2026-06-20 05:08:31 | INFO | Config | labels=/home/bear/engagement-cpu/data/processed/runs/daisee_4class_final_dataset/video_labels_4class.csv | videos=/home/bear/engagement-cpu/data/raw/daisee/DAiSEE/DataSet | features=/home/bear/engagement-cpu/data/processed/runs/extract_depth_robust_5w_20260620_050830/shard_0/features | manifest=/home/bear/engagement-cpu/data/processed/runs/extract_depth_robust_5w_20260620_050830/shard_0/feature_manifest.csv | sample=False | seed=42 | frame_stride=1 | max_frames=0 | resize_width=0 | feature_set=depth_robust | temporal_enrichment=velocity_std | label_mode=four_class | shard=0/5 | output_dim=300
+[worker-2] 2026-06-20 05:08:31 | INFO | Starting feature extraction
+[worker-2] 2026-06-20 05:08:31 | INFO | Config | labels=/home/bear/engagement-cpu/data/processed/runs/daisee_4class_final_dataset/video_labels_4class.csv | videos=/home/bear/engagement-cpu/data/raw/daisee/DAiSEE/DataSet | features=/home/bear/engagement-cpu/data/processed/runs/extract_depth_robust_5w_20260620_050830/shard_2/features | manifest=/home/bear/engagement-cpu/data/processed/runs/extract_depth_robust_5w_20260620_050830/shard_2/feature_manifest.csv | sample=False | seed=42 | frame_stride=1 | max_frames=0 | resize_width=0 | feature_set=depth_robust | temporal_enrichment=velocity_std | label_mode=four_class | shard=2/5 | output_dim=300
+[worker-4] 2026-06-20 05:08:33 | INFO | Loaded shard 4/5 | rows=1534 of total=7672
+[worker-4] 2026-06-20 05:08:33 | INFO | Indexed 9068 unique videos from raw directory
+[worker-4] 2026-06-20 05:08:33 | INFO | Processing 1534 videos
+[worker-0] 2026-06-20 05:08:33 | INFO | Loaded shard 0/5 | rows=1535 of total=7672
+[worker-0] 2026-06-20 05:08:33 | INFO | Indexed 9068 unique videos from raw directory
+[worker-0] 2026-06-20 05:08:33 | INFO | Processing 1535 videos
+[worker-4] WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+[worker-1] 2026-06-20 05:08:33 | INFO | Loaded shard 1/5 | rows=1535 of total=7672
+[worker-4] W0000 00:00:1781932113.776654   12814 face_landmarker_graph.cc:174] Sets FaceBlendshapesGraph acceleration to xnnpack by default.
+[worker-2] 2026-06-20 05:08:33 | INFO | Loaded shard 2/5 | rows=1534 of total=7672
+[worker-1] 2026-06-20 05:08:33 | INFO | Indexed 9068 unique videos from raw directory
+[worker-2] 2026-06-20 05:08:33 | INFO | Indexed 9068 unique videos from raw directory
+[worker-4] INFO: Created TensorFlow Lite XNNPACK delegate for CPU.
+[worker-2] 2026-06-20 05:08:33 | INFO | Processing 1534 videos
+[worker-1] 2026-06-20 05:08:33 | INFO | Processing 1535 videos
+[worker-0] WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+[worker-0] W0000 00:00:1781932113.787043   12836 face_landmarker_graph.cc:174] Sets FaceBlendshapesGraph acceleration to xnnpack by default.
+[worker-4] W0000 00:00:1781932113.787149   12821 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+[worker-0] INFO: Created TensorFlow Lite XNNPACK delegate for CPU.
+[worker-2] WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+[worker-2] W0000 00:00:1781932113.796231   12854 face_landmarker_graph.cc:174] Sets FaceBlendshapesGraph acceleration to xnnpack by default.
+[worker-1] WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+[worker-0] W0000 00:00:1781932113.797841   12839 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+[worker-1] W0000 00:00:1781932113.797744   12856 face_landmarker_graph.cc:174] Sets FaceBlendshapesGraph acceleration to xnnpack by default.
+[worker-2] INFO: Created TensorFlow Lite XNNPACK delegate for CPU.
+[worker-1] INFO: Created TensorFlow Lite XNNPACK delegate for CPU.
+[worker-2] W0000 00:00:1781932113.806790   12858 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+[worker-1] W0000 00:00:1781932113.807660   12875 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+[worker-4] W0000 00:00:1781932113.814655   12821 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+[worker-0] W0000 00:00:1781932113.829089   12850 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+[worker-2] W0000 00:00:1781932113.838930   12871 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+[worker-1] W0000 00:00:1781932113.844019   12885 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+[worker-3] 2026-06-20 05:08:33 | INFO | Loaded shard 3/5 | rows=1534 of total=7672
+[worker-3] 2026-06-20 05:08:33 | INFO | Indexed 9068 unique videos from raw directory
+[worker-3] 2026-06-20 05:08:33 | INFO | Processing 1534 videos
+[worker-3] WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+[worker-3] W0000 00:00:1781932113.896330   13079 face_landmarker_graph.cc:174] Sets FaceBlendshapesGraph acceleration to xnnpack by default.
+[worker-3] INFO: Created TensorFlow Lite XNNPACK delegate for CPU.
+[worker-3] W0000 00:00:1781932113.907576   13083 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+[worker-3] W0000 00:00:1781932113.943045   13096 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+[worker-4] 2026-06-20 05:09:43 | INFO | Progress 10/1534 | saved_videos=10 | saved_sequences=100 | unresolved=0 | unreadable=0
+[worker-0] 2026-06-20 05:09:44 | INFO | Progress 10/1535 | saved_videos=10 | saved_sequences=100 | unresolved=0 | unreadable=0
+[worker-2] 2026-06-20 05:09:44 | INFO | Progress 10/1534 | saved_videos=10 | saved_sequences=100 | unresolved=0 | unreadable=0
+[worker-1] 2026-06-20 05:09:44 | INFO | Progress 10/1535 | saved_videos=10 | saved_sequences=100 | unresolved=0 | unreadable=0
+[worker-3] 2026-06-20 05:09:44 | INFO | Progress 10/1534 | saved_videos=10 | saved_sequences=100 | unresolved=0 | unreadable=0
+[worker-4] 2026-06-20 05:10:54 | INFO | Progress 20/1534 | saved_videos=20 | saved_sequences=200 | unresolved=0 | unreadable=0
+[worker-0] 2026-06-20 05:10:55 | INFO | Progress 20/1535 | saved_videos=20 | saved_sequences=200 | unresolved=0 | unreadable=0
+[worker-2] 2026-06-20 05:10:55 | INFO | Progress 20/1534 | saved_videos=20 | saved_sequences=200 | unresolved=0 | unreadable=0
+[worker-3] 2026-06-20 05:10:55 | INFO | Progress 20/1534 | saved_videos=20 | saved_sequences=200 | unresolved=0 | unreadable=0
+[worker-1] 2026-06-20 05:10:55 | INFO | Progress 20/1535 | saved_videos=20 | saved_sequences=200 | unresolved=0 | unreadable=0
+[worker-4] 2026-06-20 05:12:05 | INFO | Progress 30/1534 | saved_videos=30 | saved_sequences=300 | unresolved=0 | unreadable=0
+[worker-0] 2026-06-20 05:12:06 | INFO | Progress 30/1535 | saved_videos=30 | saved_sequences=300 | unresolved=0 | unreadable=0
+[worker-2] 2026-06-20 05:12:06 | INFO | Progress 30/1534 | saved_videos=30 | saved_sequences=300 | unresolved=0 | unreadable=0
+[worker-3] 2026-06-20 05:12:07 | INFO | Progress 30/1534 | saved_videos=30 | saved_sequences=300 | unresolved=0 | unreadable=0
+[worker-1] 2026-06-20 05:12:07 | INFO | Progress 30/1535 | saved_videos=30 | saved_sequences=300 | unresolved=0 | unreadable=0

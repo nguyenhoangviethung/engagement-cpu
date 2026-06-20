@@ -1,7 +1,0 @@
-{
-  "latency_ms_mean": 11.421713925301447,
-  "latency_ms_median": 11.35543249984039,
-  "latency_ms_p95": 11.887628003023565,
-  "latency_ms_min": 10.876632004510611,
-  "latency_ms_max": 18.62848300515907
-}

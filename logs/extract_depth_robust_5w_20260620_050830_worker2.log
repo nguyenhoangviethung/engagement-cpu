@@ -1,0 +1,13 @@
+2026-06-20 05:08:31 | INFO | Starting feature extraction
+2026-06-20 05:08:31 | INFO | Config | labels=/home/bear/engagement-cpu/data/processed/runs/daisee_4class_final_dataset/video_labels_4class.csv | videos=/home/bear/engagement-cpu/data/raw/daisee/DAiSEE/DataSet | features=/home/bear/engagement-cpu/data/processed/runs/extract_depth_robust_5w_20260620_050830/shard_2/features | manifest=/home/bear/engagement-cpu/data/processed/runs/extract_depth_robust_5w_20260620_050830/shard_2/feature_manifest.csv | sample=False | seed=42 | frame_stride=1 | max_frames=0 | resize_width=0 | feature_set=depth_robust | temporal_enrichment=velocity_std | label_mode=four_class | shard=2/5 | output_dim=300
+2026-06-20 05:08:33 | INFO | Loaded shard 2/5 | rows=1534 of total=7672
+2026-06-20 05:08:33 | INFO | Indexed 9068 unique videos from raw directory
+2026-06-20 05:08:33 | INFO | Processing 1534 videos
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+W0000 00:00:1781932113.796231   12854 face_landmarker_graph.cc:174] Sets FaceBlendshapesGraph acceleration to xnnpack by default.
+INFO: Created TensorFlow Lite XNNPACK delegate for CPU.
+W0000 00:00:1781932113.806790   12858 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+W0000 00:00:1781932113.838930   12871 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+2026-06-20 05:09:44 | INFO | Progress 10/1534 | saved_videos=10 | saved_sequences=100 | unresolved=0 | unreadable=0
+2026-06-20 05:10:55 | INFO | Progress 20/1534 | saved_videos=20 | saved_sequences=200 | unresolved=0 | unreadable=0
+2026-06-20 05:12:06 | INFO | Progress 30/1534 | saved_videos=30 | saved_sequences=300 | unresolved=0 | unreadable=0

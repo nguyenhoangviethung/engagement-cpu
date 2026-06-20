@@ -1,0 +1,42 @@
+=== 4-class tmux pipeline started at Thu Jun 18 14:47:52 UTC 2026 ===
+=== 4-class train_all started at Thu Jun 18 14:47:52 UTC 2026 ===
+manifest=/home/bear/engagement-cpu/scripts/../data/processed/runs/daisee_4class_final_dataset/feature_manifest.csv
+run_root=/home/bear/engagement-cpu/scripts/../checkpoints/runs/train_all_4class_daisee4_20260618_144752
+models=gru xgboost tcn gru_basic tiny_transformer bilstm stgcn cnn_gru_fusion hybrid residual_bigru_attn
+/home/bear/engagement-cpu/src/engagement_daisee/rnn/dataset.py:16: DtypeWarning: Columns (7) have mixed types. Specify dtype option on import or set low_memory=False.
+  manifest = normalize_manifest_columns(pd.read_csv(self.manifest_csv))
+2026-06-18 14:49:43 | INFO | Loaded manifest | rows=86039 videos=7672 train=53763 val=14290 test=17986 device=auto
+2026-06-18 14:49:43 | INFO | === Running model: gru ===
+2026-06-18 14:49:58 | INFO | [gru] epoch=01/20 train_loss=1.2453 train_acc=0.4327 train_bal=0.4196 train_f1=0.3112 | val_loss=1.3234 val_acc=0.2869 val_bal=0.3489 val_f1=0.2554 | score(balanced_accuracy)=0.3489 lr=0.000300
+2026-06-18 14:50:06 | INFO | [gru] epoch=02/20 train_loss=1.1493 train_acc=0.4513 train_bal=0.4658 train_f1=0.3374 | val_loss=1.4259 val_acc=0.3352 val_bal=0.3305 val_f1=0.2772 | score(balanced_accuracy)=0.3305 lr=0.000300
+2026-06-18 14:50:14 | INFO | [gru] epoch=03/20 train_loss=1.0975 train_acc=0.4678 train_bal=0.5090 train_f1=0.3606 | val_loss=1.4524 val_acc=0.2925 val_bal=0.3183 val_f1=0.2426 | score(balanced_accuracy)=0.3183 lr=0.000300
+2026-06-18 14:50:23 | INFO | [gru] epoch=04/20 train_loss=1.0593 train_acc=0.4666 train_bal=0.5284 train_f1=0.3670 | val_loss=1.5127 val_acc=0.3961 val_bal=0.3164 val_f1=0.2913 | score(balanced_accuracy)=0.3164 lr=0.000300
+2026-06-18 14:50:32 | INFO | [gru] epoch=05/20 train_loss=1.0177 train_acc=0.4838 train_bal=0.5384 train_f1=0.3804 | val_loss=1.4932 val_acc=0.3079 val_bal=0.3228 val_f1=0.2481 | score(balanced_accuracy)=0.3228 lr=0.000150
+2026-06-18 14:50:40 | INFO | [gru] epoch=06/20 train_loss=0.9538 train_acc=0.4906 train_bal=0.5801 train_f1=0.4063 | val_loss=1.4856 val_acc=0.3268 val_bal=0.3459 val_f1=0.2628 | score(balanced_accuracy)=0.3459 lr=0.000150
+2026-06-18 14:50:49 | INFO | [gru] epoch=07/20 train_loss=0.9254 train_acc=0.4974 train_bal=0.5786 train_f1=0.4080 | val_loss=1.5544 val_acc=0.3338 val_bal=0.3263 val_f1=0.2603 | score(balanced_accuracy)=0.3263 lr=0.000150
+2026-06-18 14:50:49 | INFO | [gru] early stopping at epoch=7 best_epoch=1
+/home/bear/engagement-cpu/src/engagement_daisee/multiclass/train_all.py:277: DeprecationWarning: torch.ao.quantization is deprecated and will be removed in 2.10. 
+For migrations of users: 
+1. Eager mode quantization (torch.ao.quantization.quantize, torch.ao.quantization.quantize_dynamic), please migrate to use torchao eager mode quantize_ API instead 
+2. FX graph mode quantization (torch.ao.quantization.quantize_fx.prepare_fx,torch.ao.quantization.quantize_fx.convert_fx, please migrate to use torchao pt2e quantization API instead (prepare_pt2e, convert_pt2e) 
+3. pt2e quantization has been migrated to torchao (https://github.com/pytorch/ao/tree/main/torchao/quantization/pt2e) 
+see https://github.com/pytorch/ao/issues/2259 for more details
+  quantized = torch.quantization.quantize_dynamic(model, {nn.Linear, nn.GRU, nn.LSTM}, dtype=torch.qint8)
+2026-06-18 14:51:26 | INFO | [gru] test video metrics acc=0.4047 bal=0.4122 f1=0.3193 | model latency=78.394 ms | e2e=84.242 ms
+2026-06-18 14:51:27 | INFO | === Running model: xgboost ===
+2026-06-18 14:51:46 | INFO | Loaded 5000/53763 feature rows
+2026-06-18 14:52:10 | INFO | Loaded 10000/53763 feature rows
+2026-06-18 14:52:32 | INFO | Loaded 15000/53763 feature rows
+2026-06-18 14:52:48 | INFO | Loaded 20000/53763 feature rows
+2026-06-18 14:53:09 | INFO | Loaded 25000/53763 feature rows
+2026-06-18 14:53:28 | INFO | Loaded 30000/53763 feature rows
+2026-06-18 14:53:46 | INFO | Loaded 35000/53763 feature rows
+2026-06-18 14:54:05 | INFO | Loaded 40000/53763 feature rows
+2026-06-18 14:54:24 | INFO | Loaded 45000/53763 feature rows
+2026-06-18 14:54:43 | INFO | Loaded 50000/53763 feature rows
+2026-06-18 14:55:14 | INFO | Loaded 5000/14290 feature rows
+2026-06-18 14:55:32 | INFO | Loaded 10000/14290 feature rows
+2026-06-18 14:56:05 | INFO | Loaded 5000/17986 feature rows
+2026-06-18 14:56:24 | INFO | Loaded 10000/17986 feature rows
+2026-06-18 14:56:45 | INFO | Loaded 15000/17986 feature rows
+2026-06-18 14:57:01 | INFO | [xgboost] fitting multiclass model with 53763 rows

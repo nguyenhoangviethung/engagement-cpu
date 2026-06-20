@@ -690,7 +690,6 @@ def train_ml(
         "selected_threshold": float(selected_threshold),
         "checkpoint_metric": f"validation_{threshold_objective}",
         "threshold_objective": threshold_objective,
-        "validation_metrics": val_metrics,
         "test_metrics": test_metrics,
         "best_iteration": int(best_iteration),
         "feature_mode": feature_mode,
@@ -704,17 +703,6 @@ def train_ml(
     _save_feature_preprocessor(preprocessor_path, preprocessor_config)
     summary["preprocessor_path"] = str(preprocessor_path)
     summary_path.write_text(json.dumps(summary, indent=2))
-
-    LOGGER.info(
-        "Validation | acc=%.4f bal_acc=%.4f recall1=%.4f precision1=%.4f f2=%.4f threshold=%.2f objective=%s",
-        val_metrics["accuracy"],
-        val_metrics["balanced_accuracy"],
-        val_metrics["recall_pos"],
-        val_metrics["precision_pos"],
-        val_metrics["f2_pos"],
-        selected_threshold,
-        threshold_objective,
-    )
     LOGGER.info(
         "Test | acc=%.4f recall1=%.4f precision1=%.4f f2=%.4f threshold=%.2f",
         test_metrics["accuracy"],

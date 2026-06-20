@@ -1,0 +1,31 @@
+=== inception_lite ensemble started at Thu Jun 18 14:47:52 UTC 2026 ===
+/home/bear/engagement-cpu/src/engagement_daisee/rnn/dataset.py:16: DtypeWarning: Columns (7) have mixed types. Specify dtype option on import or set low_memory=False.
+  manifest = normalize_manifest_columns(pd.read_csv(self.manifest_csv))
+2026-06-18 14:52:07 | INFO | Loaded manifest | rows=86039 videos=7672 train=53763 val=14290 test=17986 device=auto xgb_run_root=/home/bear/engagement-cpu/scripts/../checkpoints/runs/train_all_4class_gpu_final
+2026-06-18 14:52:07 | INFO | Selection policy | objective=accuracy min_balanced_accuracy=0.7000 resolved_device=cuda amp=True
+2026-06-18 14:53:58 | INFO | [inception_lite] epoch=01/24 train_loss=2.0074 train_acc=0.0172 train_bal=0.2687 train_f1=0.0440 | val_loss=2.1528 val_acc=0.0168 val_bal=0.2506 val_f1=0.0090 | score(accuracy)=0.0168 lr=0.000250
+2026-06-18 14:55:13 | INFO | [inception_lite] epoch=02/24 train_loss=1.9460 train_acc=0.0183 train_bal=0.2891 train_f1=0.0537 | val_loss=2.1917 val_acc=0.0175 val_bal=0.2444 val_f1=0.0172 | score(accuracy)=0.0175 lr=0.000250
+2026-06-18 14:56:21 | INFO | [inception_lite] epoch=03/24 train_loss=1.9142 train_acc=0.0218 train_bal=0.3023 train_f1=0.0600 | val_loss=2.2065 val_acc=0.0182 val_bal=0.2176 val_f1=0.0237 | score(accuracy)=0.0182 lr=0.000250
+2026-06-18 14:57:34 | INFO | [inception_lite] epoch=04/24 train_loss=1.8898 train_acc=0.0270 train_bal=0.3307 train_f1=0.0663 | val_loss=2.2171 val_acc=0.0175 val_bal=0.2353 val_f1=0.0204 | score(accuracy)=0.0175 lr=0.000250
+2026-06-18 14:58:36 | INFO | [inception_lite] epoch=05/24 train_loss=1.8685 train_acc=0.0303 train_bal=0.3370 train_f1=0.0717 | val_loss=2.1868 val_acc=0.0343 val_bal=0.2193 val_f1=0.0571 | score(accuracy)=0.0343 lr=0.000250
+2026-06-18 14:59:32 | INFO | [inception_lite] epoch=06/24 train_loss=1.8359 train_acc=0.0323 train_bal=0.3510 train_f1=0.0785 | val_loss=2.1806 val_acc=0.0175 val_bal=0.2353 val_f1=0.0191 | score(accuracy)=0.0175 lr=0.000250
+2026-06-18 15:00:24 | INFO | [inception_lite] epoch=07/24 train_loss=1.8422 train_acc=0.0334 train_bal=0.3621 train_f1=0.0800 | val_loss=2.1746 val_acc=0.0245 val_bal=0.2151 val_f1=0.0425 | score(accuracy)=0.0245 lr=0.000250
+2026-06-18 15:01:26 | INFO | [inception_lite] epoch=08/24 train_loss=1.8198 train_acc=0.0364 train_bal=0.3728 train_f1=0.0853 | val_loss=2.1596 val_acc=0.0210 val_bal=0.2258 val_f1=0.0335 | score(accuracy)=0.0210 lr=0.000250
+2026-06-18 15:02:43 | INFO | [inception_lite] epoch=09/24 train_loss=1.8068 train_acc=0.0353 train_bal=0.3776 train_f1=0.0862 | val_loss=2.2336 val_acc=0.0182 val_bal=0.2279 val_f1=0.0220 | score(accuracy)=0.0182 lr=0.000250
+2026-06-18 15:03:16 | INFO | [inception_lite] epoch=10/24 train_loss=1.7786 train_acc=0.0394 train_bal=0.3960 train_f1=0.0920 | val_loss=2.2206 val_acc=0.0182 val_bal=0.2461 val_f1=0.0192 | score(accuracy)=0.0182 lr=0.000125
+2026-06-18 15:03:37 | INFO | [inception_lite] epoch=11/24 train_loss=1.7626 train_acc=0.0412 train_bal=0.4053 train_f1=0.0997 | val_loss=2.1963 val_acc=0.0196 val_bal=0.2014 val_f1=0.0295 | score(accuracy)=0.0196 lr=0.000125
+2026-06-18 15:04:00 | INFO | [inception_lite] epoch=12/24 train_loss=1.7448 train_acc=0.0422 train_bal=0.4148 train_f1=0.1055 | val_loss=2.2214 val_acc=0.0203 val_bal=0.2499 val_f1=0.0239 | score(accuracy)=0.0203 lr=0.000125
+2026-06-18 15:04:21 | INFO | [inception_lite] epoch=13/24 train_loss=1.7305 train_acc=0.0434 train_bal=0.4247 train_f1=0.1068 | val_loss=2.2065 val_acc=0.0217 val_bal=0.2431 val_f1=0.0324 | score(accuracy)=0.0217 lr=0.000125
+2026-06-18 15:04:21 | INFO | [inception_lite] early stopping at epoch=13 best_epoch=5
+2026-06-18 15:04:47 | INFO | [inception_lite] test video metrics acc=0.0533 bal=0.3038 f1=0.1249 | model latency=54.701 ms
+/home/bear/engagement-cpu/src/engagement_daisee/rnn/dataset.py:16: DtypeWarning: Columns (7) have mixed types. Specify dtype option on import or set low_memory=False.
+  manifest = normalize_manifest_columns(pd.read_csv(self.manifest_csv))
+2026-06-18 15:08:19 | INFO | Loaded 5000/14290 feature rows
+2026-06-18 15:08:40 | INFO | Loaded 10000/14290 feature rows
+/home/bear/engagement-cpu/src/engagement_daisee/rnn/dataset.py:16: DtypeWarning: Columns (7) have mixed types. Specify dtype option on import or set low_memory=False.
+  manifest = normalize_manifest_columns(pd.read_csv(self.manifest_csv))
+2026-06-18 15:11:15 | INFO | Loaded 5000/17986 feature rows
+2026-06-18 15:11:30 | INFO | Loaded 10000/17986 feature rows
+2026-06-18 15:11:46 | INFO | Loaded 15000/17986 feature rows
+2026-06-18 15:12:08 | INFO | [fusion] test video metrics acc=0.7382 bal=0.7635 f1=0.7727 | model latency=6.969 ms | e2e=21.069 ms
+=== inception_lite ensemble finished at Thu Jun 18 15:12:12 UTC 2026 ===
