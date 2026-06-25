@@ -22,7 +22,14 @@ from torch.utils.data import DataLoader, Subset
 from xgboost import XGBClassifier
 from xgboost.callback import EarlyStopping
 
-from engagement_daisee.common.config import FEATURE_DIM, HIDDEN_SIZE, LEARNING_RATE, RANDOM_SEED, WEIGHT_DECAY
+from engagement_daisee.common.config import (
+    DEPTH_ROBUST_V2_FEATURE_DIM,
+    FOUR_CLASS_FEATURE_MANIFEST_CSV,
+    HIDDEN_SIZE,
+    LEARNING_RATE,
+    RANDOM_SEED,
+    WEIGHT_DECAY,
+)
 from engagement_daisee.common.manifest import normalize_manifest_columns
 from engagement_daisee.ml.train import _apply_feature_preprocessor, _build_feature_matrix, _fit_feature_preprocessor, _load_feature_preprocessor
 from engagement_daisee.multiclass.train_all import (
@@ -160,7 +167,7 @@ class InceptionTimeBlock(nn.Module):
 
 
 class InceptionLiteClassifier(nn.Module):
-    def __init__(self, input_size: int = FEATURE_DIM, hidden_size: int = 160, num_blocks: int = 4, dropout: float = 0.2, num_classes: int = NUM_CLASSES):
+    def __init__(self, input_size: int = DEPTH_ROBUST_V2_FEATURE_DIM, hidden_size: int = 160, num_blocks: int = 4, dropout: float = 0.2, num_classes: int = NUM_CLASSES):
         super().__init__()
         stem_channels = hidden_size
         self.input_proj = nn.Sequential(
@@ -271,9 +278,10 @@ def _train_inception(
 ) -> dict[str, object]:
     run_dir = output_dir / "inception_lite"
     run_dir.mkdir(parents=True, exist_ok=True)
+    input_size = int(dataset[train_indices[0]][0].shape[-1])
 
     model = InceptionLiteClassifier(
-        input_size=FEATURE_DIM,
+        input_size=input_size,
         hidden_size=hidden_size,
         num_blocks=num_blocks,
         dropout=dropout,
@@ -486,7 +494,7 @@ def _train_inception(
         "run_dir": str(run_dir),
         "checkpoint_path": str(run_dir / "inception_lite.pt"),
         "model_kwargs": {
-            "input_size": FEATURE_DIM,
+            "input_size": input_size,
             "hidden_size": hidden_size,
             "num_blocks": num_blocks,
             "dropout": dropout,
@@ -1078,17 +1086,17 @@ def run_experiment(
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Train an InceptionTime-lite experiment and fuse it with the latest strong XGBoost checkpoint.")
-    parser.add_argument("--manifest", type=Path, default=Path("data/processed/runs/daisee_4class_final_dataset/feature_manifest.csv"))
+    parser.add_argument("--manifest", type=Path, default=FOUR_CLASS_FEATURE_MANIFEST_CSV)
     parser.add_argument(
         "--xgb-run-root",
         type=Path,
-        default=Path("checkpoints/runs/train_all_4class_gpu_final"),
+        default=Path("checkpoints/runs/train_all_4class_depth_robust_latest"),
         help="Run root containing the existing 4-class XGBoost checkpoint to fuse with.",
     )
     parser.add_argument("--output-dir", type=Path, default=Path("checkpoints/runs/inception_lite_ensemble_4class"))
     parser.add_argument("--report-json", type=Path, default=Path("checkpoints/runs/inception_lite_ensemble_4class/report.json"))
     parser.add_argument("--report-csv", type=Path, default=Path("checkpoints/runs/inception_lite_ensemble_4class/report.csv"))
-    parser.add_argument("--device", type=str, default="auto")
+    parser.add_argument("--device", type=str, default="cpu")
     parser.add_argument("--batch-size", type=int, default=128)
     parser.add_argument("--epochs", type=int, default=24)
     parser.add_argument("--patience", type=int, default=8)

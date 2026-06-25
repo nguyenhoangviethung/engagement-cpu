@@ -8,11 +8,11 @@ LOG_DIR="$WORKDIR/logs"
 LATEST_LOG_LINK="$LOG_DIR/latest_inception_lite_ensemble_4class.log"
 
 COMMAND="start"
-MANIFEST="$WORKDIR/data/processed/runs/daisee_4class_final_dataset/feature_manifest.csv"
-XGB_RUN_ROOT="$WORKDIR/checkpoints/runs/train_all_4class_gpu_final"
+MANIFEST=""
+XGB_RUN_ROOT=""
 RUN_ID_PREFIX="inception_lite_ensemble"
-DEVICE="auto"
-BATCH_SIZE=128
+DEVICE="cpu"
+BATCH_SIZE=256
 EPOCHS=24
 PATIENCE=8
 MIN_EPOCHS=6
@@ -24,14 +24,37 @@ FEATURE_MODE="tsfresh"
 HIDDEN_SIZE=160
 NUM_BLOCKS=4
 DROPOUT=0.20
-CPU_THREADS=2
-LATENCY_THREADS=2
+CPU_THREADS=8
+LATENCY_THREADS=4
 LATENCY_WARMUP=30
 LATENCY_ITERS=200
-USE_AMP=1
+USE_AMP=0
 
 shell_quote() {
   printf "%q" "$1"
+}
+
+resolve_latest_depth_manifest() {
+  local latest
+  latest="$(find "$WORKDIR/data/processed/runs" -maxdepth 2 -type f -name feature_manifest.csv \
+    -path '*/extract_depth_robust*/*' -printf '%T@ %p\n' 2>/dev/null \
+    | sort -nr | head -1 | cut -d' ' -f2-)"
+  if [[ -n "$latest" ]]; then
+    printf '%s\n' "$latest"
+    return 0
+  fi
+  printf '%s\n' "$WORKDIR/data/processed/runs/extract_depth_robust_5w_20260620_061230/feature_manifest.csv"
+}
+
+resolve_latest_train_all_root() {
+  local latest
+  latest="$(find "$WORKDIR/checkpoints/runs" -maxdepth 1 -type d -name 'train_all_4class_depth_robust_*' -printf '%T@ %p\n' 2>/dev/null \
+    | sort -nr | head -1 | cut -d' ' -f2-)"
+  if [[ -n "$latest" ]]; then
+    printf '%s\n' "$latest"
+    return 0
+  fi
+  printf '%s\n' "$WORKDIR/checkpoints/runs/train_all_4class_depth_robust_latest"
 }
 
 usage() {
@@ -98,6 +121,13 @@ while [[ $# -gt 0 ]]; do
     *) echo "Unknown argument: $1"; usage; exit 1 ;;
   esac
 done
+
+if [[ -z "$MANIFEST" ]]; then
+  MANIFEST="$(resolve_latest_depth_manifest)"
+fi
+if [[ -z "$XGB_RUN_ROOT" ]]; then
+  XGB_RUN_ROOT="$(resolve_latest_train_all_root)"
+fi
 
 mkdir -p "$LOG_DIR"
 

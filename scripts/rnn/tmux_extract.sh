@@ -10,6 +10,7 @@ SAMPLE_MODE=0
 RUN_ID=""
 RUNS_PROCESSED_DIR="$WORKDIR/data/processed/runs"
 COMMAND="start"
+VIDEOS_DIR=""
 FRAME_STRIDE=1
 MAX_FRAMES=0
 RESIZE_WIDTH=0
@@ -33,6 +34,7 @@ Commands:
 Options:
   --sample            Run extract in sample mode
   --labels PATH       Labels CSV used by extraction
+  --videos PATH       DAiSEE DataSet directory (default: auto-detect)
   --session NAME      tmux session name (default: engagement_extract)
   --env NAME          conda environment name (default: thesis)
   --log-every N       Progress log frequency for extract (videos)
@@ -60,6 +62,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --labels)
       LABELS_CSV="$2"
+      shift 2
+      ;;
+    --videos)
+      VIDEOS_DIR="$2"
       shift 2
       ;;
     --session)
@@ -118,6 +124,39 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+resolve_daisee_root() {
+  local candidate
+  for candidate in \
+    "${VIDEOS_DIR:-}" \
+    "$WORKDIR/data/raw/daisee/DAiSEE" \
+    "$WORKDIR/data/raw/daisee/DAiSEE/DataSet" \
+    "$WORKDIR/data/raw/DAiSEE" \
+    "$WORKDIR/data/raw/DAiSEE/DataSet" \
+    "$HOME/engagement-cpu/data/raw/daisee/DAiSEE" \
+    "$HOME/engagement-cpu/data/raw/DAiSEE" \
+    "/mnt/data/raw/daisee/DAiSEE" \
+    "/mnt/data/raw/DAiSEE"; do
+    [[ -n "$candidate" ]] || continue
+    if [[ -d "$candidate/DataSet" && -d "$candidate/Labels" ]]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+    if [[ "$(basename "$candidate")" == "DataSet" ]]; then
+      candidate="$(dirname "$candidate")"
+      if [[ -d "$candidate/DataSet" && -d "$candidate/Labels" ]]; then
+        printf '%s\n' "$candidate"
+        return 0
+      fi
+    fi
+  done
+  printf '%s\n' "$WORKDIR/data/raw/daisee/DAiSEE"
+}
+
+if [[ -z "$VIDEOS_DIR" ]]; then
+  VIDEOS_DIR="$(resolve_daisee_root)"
+fi
+VIDEOS_DIR="$VIDEOS_DIR/DataSet"
+
 mkdir -p "$LOG_DIR"
 LATEST_LOG_LINK="$LOG_DIR/latest_extract.log"
 
@@ -152,6 +191,7 @@ echo "Run manifest: $run_manifest" | tee -a "$run_log"
 mkdir -p "$run_features_dir"
 PYTHONPATH="$WORKDIR/src" "$WORKDIR/scripts/lib/run_python.sh" --env "$CONDA_ENV" --workdir "$WORKDIR" python -u -m engagement_daisee.rnn.extract_features$sample_flag \
   --labels "$LABELS_CSV" \
+  --videos "$VIDEOS_DIR" \
   --features-dir "$run_features_dir" \
   --manifest "$run_manifest" \
   --log-every "$LOG_EVERY" \

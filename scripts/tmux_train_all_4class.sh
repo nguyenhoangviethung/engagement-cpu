@@ -7,14 +7,15 @@ WORKDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/.."
 LOG_DIR="$WORKDIR/logs"
 RUNS_CHECKPOINT_DIR="$WORKDIR/checkpoints/runs"
 LATEST_LOG_LINK="$LOG_DIR/latest_train_all_4class.log"
+LATEST_RUN_LINK="$RUNS_CHECKPOINT_DIR/train_all_4class_depth_robust_latest"
 
 COMMAND="start"
-RUN_ID_PREFIX="daisee4"
-MANIFEST="$WORKDIR/data/processed/runs/daisee_4class_final_dataset/feature_manifest.csv"
-MODELS="gru xgboost tcn gru_basic tiny_transformer bilstm stgcn cnn_gru_fusion hybrid residual_bigru_attn"
-DEVICE="auto"
-USE_AMP=1
-BATCH_SIZE=128
+RUN_ID_PREFIX="depth_robust"
+MANIFEST=""
+MODELS="gru tcn gru_basic tiny_transformer bilstm cnn_gru_fusion hybrid residual_bigru_attn xgboost"
+DEVICE="cpu"
+USE_AMP=0
+BATCH_SIZE=256
 EPOCHS=20
 PATIENCE=6
 MIN_EPOCHS=5
@@ -31,13 +32,28 @@ DROPOUT=0.25
 NUM_HEADS=4
 KERNEL_SIZE=5
 TCN_BLOCKS=4
-CPU_THREADS=2
-LATENCY_THREADS=2
+CPU_THREADS=8
+XGB_THREADS=8
+LATENCY_THREADS=4
 LATENCY_WARMUP=30
 LATENCY_ITERS=200
+ISOLATE_MODELS=1
+SHUTDOWN_ON_COMPLETE=0
 
 shell_quote() {
   printf "%q" "$1"
+}
+
+resolve_latest_depth_manifest() {
+  local latest
+  latest="$(find "$WORKDIR/data/processed/runs" -maxdepth 2 -type f -name feature_manifest.csv \
+    -path '*/extract_depth_robust*/*' -printf '%T@ %p\n' 2>/dev/null \
+    | sort -nr | head -1 | cut -d' ' -f2-)"
+  if [[ -n "$latest" ]]; then
+    printf '%s\n' "$latest"
+    return 0
+  fi
+  printf '%s\n' "$WORKDIR/data/processed/runs/extract_depth_robust_5w_20260620_061230/feature_manifest.csv"
 }
 
 usage() {
@@ -71,9 +87,12 @@ Options:
   --kernel-size N
   --tcn-blocks N
   --cpu-threads N
+  --xgb-threads N
   --latency-threads N
   --latency-warmup N
   --latency-iters N
+  --no-isolate-models
+  --shutdown-on-complete
   --env NAME
   --help
 USAGE
@@ -106,14 +125,21 @@ while [[ $# -gt 0 ]]; do
     --kernel-size) KERNEL_SIZE="$2"; shift 2 ;;
     --tcn-blocks) TCN_BLOCKS="$2"; shift 2 ;;
     --cpu-threads) CPU_THREADS="$2"; shift 2 ;;
+    --xgb-threads) XGB_THREADS="$2"; shift 2 ;;
     --latency-threads) LATENCY_THREADS="$2"; shift 2 ;;
     --latency-warmup) LATENCY_WARMUP="$2"; shift 2 ;;
     --latency-iters) LATENCY_ITERS="$2"; shift 2 ;;
+    --no-isolate-models) ISOLATE_MODELS=0; shift ;;
+    --shutdown-on-complete) SHUTDOWN_ON_COMPLETE=1; shift ;;
     --env) CONDA_ENV="$2"; shift 2 ;;
     --help|-h) usage; exit 0 ;;
     *) echo "Unknown argument: $1"; usage; exit 1 ;;
   esac
 done
+
+if [[ -z "$MANIFEST" ]]; then
+  MANIFEST="$(resolve_latest_depth_manifest)"
+fi
 
 mkdir -p "$LOG_DIR" "$RUNS_CHECKPOINT_DIR"
 
@@ -144,9 +170,12 @@ OBJECTIVE=$(shell_quote "$OBJECTIVE") FEATURE_MODE=$(shell_quote "$FEATURE_MODE"
 DIM_COMPONENTS=$(shell_quote "$DIM_COMPONENTS") OVERSAMPLE=$(shell_quote "$OVERSAMPLE") HIDDEN_SIZE=$(shell_quote "$HIDDEN_SIZE") \
 NUM_LAYERS=$(shell_quote "$NUM_LAYERS") DROPOUT=$(shell_quote "$DROPOUT") NUM_HEADS=$(shell_quote "$NUM_HEADS") \
 KERNEL_SIZE=$(shell_quote "$KERNEL_SIZE") TCN_BLOCKS=$(shell_quote "$TCN_BLOCKS") CPU_THREADS=$(shell_quote "$CPU_THREADS") \
+XGB_THREADS=$(shell_quote "$XGB_THREADS") \
 LATENCY_THREADS=$(shell_quote "$LATENCY_THREADS") LATENCY_WARMUP=$(shell_quote "$LATENCY_WARMUP") LATENCY_ITERS=$(shell_quote "$LATENCY_ITERS") \
-USE_AMP=$(shell_quote "$USE_AMP") bash $(shell_quote "$WORKDIR/scripts/train_all_4class_runner.sh")
+USE_AMP=$(shell_quote "$USE_AMP") ISOLATE_MODELS=$(shell_quote "$ISOLATE_MODELS") \
+SHUTDOWN_ON_COMPLETE=$(shell_quote "$SHUTDOWN_ON_COMPLETE") bash $(shell_quote "$WORKDIR/scripts/train_all_4class_runner.sh")
 echo "=== 4-class tmux pipeline finished at \$(date) ===" | tee -a $(shell_quote "$run_log")
+ln -sfn $(shell_quote "$run_root") $(shell_quote "$LATEST_RUN_LINK")
 ln -sfn $(shell_quote "$run_log") $(shell_quote "$LATEST_LOG_LINK")
 EOF
   chmod +x "$runner_script"

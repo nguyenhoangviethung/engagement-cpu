@@ -9,6 +9,7 @@ RUNS_DIR="$WORKDIR/checkpoints/runs"
 LATEST_LOG_LINK="$LOG_DIR/latest_fusion_sweep_xgb_4class.log"
 COMMAND="start"
 RUN_ID_PREFIX="fusion_sweep_xgb_4class"
+MANIFEST=""
 WEIGHT_STEP=0.05
 MIN_ACCURACY=0.75
 MIN_BALANCED_ACCURACY=0.75
@@ -17,6 +18,18 @@ MAX_BALANCED_ACCURACY=1.0
 
 shell_quote() {
   printf "%q" "$1"
+}
+
+resolve_latest_depth_manifest() {
+  local latest
+  latest="$(find "$WORKDIR/data/processed/runs" -maxdepth 2 -type f -name feature_manifest.csv \
+    -path '*/extract_depth_robust*/*' -printf '%T@ %p\n' 2>/dev/null \
+    | sort -nr | head -1 | cut -d' ' -f2-)"
+  if [[ -n "$latest" ]]; then
+    printf '%s\n' "$latest"
+    return 0
+  fi
+  printf '%s\n' "$WORKDIR/data/processed/runs/extract_depth_robust_5w_20260620_061230/feature_manifest.csv"
 }
 
 while [[ $# -gt 0 ]]; do
@@ -34,6 +47,10 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+if [[ -z "$MANIFEST" ]]; then
+  MANIFEST="$(resolve_latest_depth_manifest)"
+fi
+
 mkdir -p "$LOG_DIR" "$RUNS_DIR"
 
 start_session() {
@@ -50,8 +67,9 @@ cd $(shell_quote "$WORKDIR")
 ln -sfn $(shell_quote "$run_log") $(shell_quote "$LATEST_LOG_LINK")
 trap 'status=\$?; if [[ \$status -ne 0 ]]; then echo "=== fusion sweep xgb failed with exit code \$status at \$(date) ===" | tee -a $(shell_quote "$run_log"); fi' EXIT
 echo "=== fusion sweep xgb started at \$(date) ===" | tee -a $(shell_quote "$run_log")
-bash $(shell_quote "$WORKDIR/scripts/lib/run_python.sh") --env $(shell_quote "$CONDA_ENV") --workdir $(shell_quote "$WORKDIR") \
-  env PYTHONPATH=$(shell_quote "$WORKDIR/src") python -u -m engagement_daisee.multiclass.fusion_sweep_xgb \
+  bash $(shell_quote "$WORKDIR/scripts/lib/run_python.sh") --env $(shell_quote "$CONDA_ENV") --workdir $(shell_quote "$WORKDIR") \
+    env PYTHONPATH=$(shell_quote "$WORKDIR/src") python -u -m engagement_daisee.multiclass.fusion_sweep_xgb \
+  --manifest $(shell_quote "$MANIFEST") \
   --output-json $(shell_quote "$report_json") \
   --weight-step $(shell_quote "$WEIGHT_STEP") \
   --min-accuracy $(shell_quote "$MIN_ACCURACY") \

@@ -12,6 +12,7 @@ import pandas as pd
 from xgboost import XGBClassifier
 
 from engagement_daisee.common.manifest import normalize_manifest_columns
+from engagement_daisee.common.config import FOUR_CLASS_FEATURE_MANIFEST_CSV
 from engagement_daisee.ml.train import (
     _apply_feature_preprocessor,
     _build_feature_matrix,
@@ -284,13 +285,13 @@ def run_sweep(
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Validation-selected CPU XGBoost sweep optimized for 4-class video accuracy.")
-    parser.add_argument("--manifest", type=Path, default=Path("data/processed/runs/daisee_4class_final_dataset/feature_manifest.csv"))
+    parser.add_argument("--manifest", type=Path, default=FOUR_CLASS_FEATURE_MANIFEST_CSV)
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--report-json", type=Path, required=True)
     parser.add_argument("--feature-mode", choices=["basic", "tsfresh", "copur"], default="tsfresh")
     parser.add_argument("--n-estimators", type=int, default=800)
     parser.add_argument("--round-step", type=int, default=25)
-    parser.add_argument("--cpu-threads", type=int, default=4)
+    parser.add_argument("--cpu-threads", type=int, default=8)
     parser.add_argument("--latency-warmup", type=int, default=30)
     parser.add_argument("--latency-iters", type=int, default=200)
     parser.add_argument("--seed", type=int, default=42)

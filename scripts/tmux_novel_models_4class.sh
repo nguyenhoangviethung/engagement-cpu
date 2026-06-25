@@ -7,12 +7,24 @@ CONDA_ENV="thesis"
 WORKDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/.."
 LOG_DIR="$WORKDIR/logs"
 RUN_DIR="$WORKDIR/checkpoints/runs"
-MANIFEST="$WORKDIR/data/processed/runs/daisee_4class_final_dataset/feature_manifest.csv"
+MANIFEST=""
 LATEST_LOG_LINK="$LOG_DIR/latest_novel_models_4class.log"
 COMMAND="start"
 
 shell_quote() {
   printf "%q" "$1"
+}
+
+resolve_latest_depth_manifest() {
+  local latest
+  latest="$(find "$WORKDIR/data/processed/runs" -maxdepth 2 -type f -name feature_manifest.csv \
+    -path '*/extract_depth_robust*/*' -printf '%T@ %p\n' 2>/dev/null \
+    | sort -nr | head -1 | cut -d' ' -f2-)"
+  if [[ -n "$latest" ]]; then
+    printf '%s\n' "$latest"
+    return 0
+  fi
+  printf '%s\n' "$WORKDIR/data/processed/runs/extract_depth_robust_5w_20260620_061230/feature_manifest.csv"
 }
 
 while [[ $# -gt 0 ]]; do
@@ -25,6 +37,10 @@ while [[ $# -gt 0 ]]; do
     *) echo "Unknown argument: $1"; exit 1 ;;
   esac
 done
+
+if [[ -z "$MANIFEST" ]]; then
+  MANIFEST="$(resolve_latest_depth_manifest)"
+fi
 
 mkdir -p "$LOG_DIR" "$RUN_DIR"
 
@@ -59,7 +75,7 @@ run_method() {
     --manifest $(shell_quote "$MANIFEST") \
     --output-dir $(shell_quote "$run_root")/"\$method" \
     --report-json $(shell_quote "$run_root")/"\${method}"/summary.json \
-    --cpu-threads 4 --latency-warmup 20 --latency-iters 100 "\$@" 2>&1 | tee -a $(shell_quote "$run_log")
+    --cpu-threads 8 --latency-warmup 20 --latency-iters 100 "\$@" 2>&1 | tee -a $(shell_quote "$run_log")
   local status="\${PIPESTATUS[0]}"
   set -e
   if [[ "\$status" -eq 0 ]]; then

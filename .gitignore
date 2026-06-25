@@ -1,11 +1,11 @@
-# logs/
+logs/
 /checkpoints/runs/
 data/
 data/raw/
 data/processed/
 external/
 __pycache__/
-# *.log
+*.log
 .vscode/
 AGENTS.md
 

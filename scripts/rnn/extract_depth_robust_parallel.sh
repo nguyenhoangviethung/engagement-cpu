@@ -3,9 +3,9 @@ set -euo pipefail
 
 WORKDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 RUN_ID="${1:?Usage: extract_depth_robust_parallel.sh RUN_ID [WORKERS]}"
-WORKERS="${2:-5}"
+WORKERS="${2:-8}"
 LABELS_CSV="$WORKDIR/data/processed/runs/daisee_4class_final_dataset/video_labels_4class.csv"
-VIDEOS_DIR="$WORKDIR/data/raw/daisee/DAiSEE/DataSet"
+VIDEOS_DIR=""
 RUN_DIR="$WORKDIR/data/processed/runs/extract_${RUN_ID}"
 LOG_DIR="$WORKDIR/logs"
 GLOBAL_LOG="$LOG_DIR/extract_${RUN_ID}.log"
@@ -19,6 +19,39 @@ if [[ ! -f "$LABELS_CSV" ]]; then
   echo "Missing labels CSV: $LABELS_CSV" >&2
   exit 1
 fi
+
+resolve_daisee_root() {
+  local candidate
+  for candidate in \
+    "${VIDEOS_DIR:-}" \
+    "$WORKDIR/data/raw/daisee/DAiSEE" \
+    "$WORKDIR/data/raw/daisee/DAiSEE/DataSet" \
+    "$WORKDIR/data/raw/DAiSEE" \
+    "$WORKDIR/data/raw/DAiSEE/DataSet" \
+    "$HOME/engagement-cpu/data/raw/daisee/DAiSEE" \
+    "$HOME/engagement-cpu/data/raw/DAiSEE" \
+    "/mnt/data/raw/daisee/DAiSEE" \
+    "/mnt/data/raw/DAiSEE"; do
+    [[ -n "$candidate" ]] || continue
+    if [[ -d "$candidate/DataSet" && -d "$candidate/Labels" ]]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+    if [[ "$(basename "$candidate")" == "DataSet" ]]; then
+      candidate="$(dirname "$candidate")"
+      if [[ -d "$candidate/DataSet" && -d "$candidate/Labels" ]]; then
+        printf '%s\n' "$candidate"
+        return 0
+      fi
+    fi
+  done
+  printf '%s\n' "$WORKDIR/data/raw/daisee/DAiSEE"
+}
+
+if [[ -z "$VIDEOS_DIR" ]]; then
+  VIDEOS_DIR="$(resolve_daisee_root)"
+fi
+VIDEOS_DIR="$VIDEOS_DIR/DataSet"
 if [[ ! -d "$VIDEOS_DIR" ]]; then
   echo "Missing videos directory: $VIDEOS_DIR" >&2
   exit 1

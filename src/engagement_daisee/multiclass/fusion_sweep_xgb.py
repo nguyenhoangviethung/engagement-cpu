@@ -12,6 +12,7 @@ import pandas as pd
 from xgboost import XGBClassifier
 
 from engagement_daisee.common.manifest import normalize_manifest_columns
+from engagement_daisee.common.config import FOUR_CLASS_FEATURE_MANIFEST_CSV
 from engagement_daisee.ml.train import _apply_feature_preprocessor, _build_feature_matrix, _load_feature_preprocessor
 from engagement_daisee.multiclass.train_all import _aggregate_by_video, _compute_multiclass_metrics, _split_indices
 
@@ -267,7 +268,7 @@ def run_sweep(
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Sweep lightweight fusion of existing 4-class XGBoost predictors.")
-    parser.add_argument("--manifest", type=Path, default=Path("data/processed/runs/daisee_4class_final_dataset/feature_manifest.csv"))
+    parser.add_argument("--manifest", type=Path, default=FOUR_CLASS_FEATURE_MANIFEST_CSV)
     parser.add_argument("--output-json", type=Path, required=True)
     parser.add_argument("--final-xgb-model", type=Path, default=Path("checkpoints/runs/product_4class_fixed_triple_xgb/final_xgb/model.json"))
     parser.add_argument("--final-xgb-preprocessor", type=Path, default=Path("checkpoints/runs/product_4class_fixed_triple_xgb/final_xgb/preprocessor.npz"))

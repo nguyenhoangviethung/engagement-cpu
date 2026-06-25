@@ -6,7 +6,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-from engagement_daisee.common.config import FEATURE_DIM
+from engagement_daisee.common.config import DEPTH_ROBUST_V2_FEATURE_DIM
 from engagement_daisee.rnn.models.evolved import (
     EngagementCNNGRUFusion as BinaryCNNGRUFusion,
     EngagementResidualBiGRUAttention as BinaryResidualBiGRUAttention,
@@ -21,6 +21,7 @@ from engagement_daisee.rnn.models.transformer import EngagementTinyTransformer a
 
 
 NUM_CLASSES = 4
+FEATURE_DIM = DEPTH_ROBUST_V2_FEATURE_DIM
 
 
 def _make_last_linear(module: nn.Module, num_classes: int) -> nn.Module:

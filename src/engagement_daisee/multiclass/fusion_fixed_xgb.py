@@ -12,6 +12,7 @@ import pandas as pd
 from xgboost import XGBClassifier
 
 from engagement_daisee.common.manifest import normalize_manifest_columns
+from engagement_daisee.common.config import FOUR_CLASS_FEATURE_MANIFEST_CSV
 from engagement_daisee.ml.train import _apply_feature_preprocessor, _build_feature_matrix, _load_feature_preprocessor
 from engagement_daisee.multiclass.fusion_sweep_xgb import _adjust, _class_bias, _normalize, _video_metrics, _xgb_probs
 from engagement_daisee.multiclass.train_all import _split_indices
@@ -135,7 +136,7 @@ def run_fixed(args: argparse.Namespace) -> dict[str, object]:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Evaluate a fixed 4-class triple-XGBoost fusion without metric-window search.")
-    parser.add_argument("--manifest", type=Path, default=Path("data/processed/runs/daisee_4class_final_dataset/feature_manifest.csv"))
+    parser.add_argument("--manifest", type=Path, default=FOUR_CLASS_FEATURE_MANIFEST_CSV)
     parser.add_argument("--output-json", type=Path, required=True)
     parser.add_argument("--final-xgb-model", type=Path, default=Path("checkpoints/runs/product_4class_fixed_triple_xgb/final_xgb/model.json"))
     parser.add_argument("--final-xgb-preprocessor", type=Path, default=Path("checkpoints/runs/product_4class_fixed_triple_xgb/final_xgb/preprocessor.npz"))

@@ -18,6 +18,7 @@ from sklearn.preprocessing import StandardScaler
 from xgboost import XGBClassifier
 
 from engagement_daisee.common.manifest import normalize_manifest_columns
+from engagement_daisee.common.config import FOUR_CLASS_FEATURE_MANIFEST_CSV
 from engagement_daisee.ml.train import (
     _apply_feature_preprocessor,
     _build_feature_matrix,
@@ -507,14 +508,14 @@ def run_deep_forest(
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Novel CPU-friendly 4-class engagement experiments.")
     parser.add_argument("--method", required=True, choices=["ordinal", "minirocket", "deep_forest"])
-    parser.add_argument("--manifest", type=Path, default=Path("data/processed/runs/daisee_4class_final_dataset/feature_manifest.csv"))
+    parser.add_argument("--manifest", type=Path, default=FOUR_CLASS_FEATURE_MANIFEST_CSV)
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--report-json", type=Path, required=True)
     parser.add_argument("--n-estimators", type=int, default=500)
     parser.add_argument("--round-step", type=int, default=25)
     parser.add_argument("--num-kernels", type=int, default=128)
     parser.add_argument("--folds", type=int, default=3)
-    parser.add_argument("--cpu-threads", type=int, default=4)
+    parser.add_argument("--cpu-threads", type=int, default=8)
     parser.add_argument("--latency-warmup", type=int, default=20)
     parser.add_argument("--latency-iters", type=int, default=100)
     parser.add_argument("--seed", type=int, default=42)

@@ -6,8 +6,12 @@ import gc
 import json
 import logging
 import math
+import os
 import random
+import signal
 import statistics
+import subprocess
+import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -22,7 +26,7 @@ from torch.utils.data import DataLoader, Subset
 from xgboost import XGBClassifier
 from xgboost.callback import EarlyStopping
 
-from engagement_daisee.common.config import BATCH_SIZE, DROPOUT, EPOCHS, FEATURE_MANIFEST_CSV, FEATURE_DIM, HIDDEN_SIZE, LEARNING_RATE, RANDOM_SEED, WEIGHT_DECAY
+from engagement_daisee.common.config import BATCH_SIZE, DROPOUT, EPOCHS, FOUR_CLASS_FEATURE_MANIFEST_CSV, HIDDEN_SIZE, LEARNING_RATE, RANDOM_SEED, WEIGHT_DECAY
 from engagement_daisee.common.manifest import normalize_manifest_columns
 from engagement_daisee.ml.train import _apply_feature_preprocessor, _build_feature_matrix, _fit_feature_preprocessor
 from engagement_daisee.multiclass.models import NUM_CLASSES, build_multiclass_model
@@ -36,19 +40,22 @@ DEFAULT_REPORT_CSV = Path("checkpoints/runs/daisee_4class_train_all/report.csv")
 DEFAULT_HISTORY_JSONL = Path("checkpoints/runs/daisee_4class_train_all/history.jsonl")
 DEFAULT_MODELS = [
     "gru",
-    "xgboost",
     "tcn",
     "gru_basic",
     "tiny_transformer",
     "bilstm",
-    "stgcn",
     "cnn_gru_fusion",
     "hybrid",
     "residual_bigru_attn",
+    "xgboost",
 ]
+# With the 32-GiB training profile, keep the richer temporal statistics. XGBoost
+# is constrained below (64 histogram bins and isolated process) to retain a
+# comfortable memory margin on the full 12,097-column matrix.
 DEFAULT_FEATURE_MODE = "tsfresh"
-DEFAULT_DEVICE = "auto"
-DEFAULT_CPU_THREADS = 2
+DEFAULT_DEVICE = "cpu"
+DEFAULT_CPU_THREADS = 4
+DEFAULT_XGB_THREADS = 8
 DEFAULT_LATENCY_THREADS = 2
 DEFAULT_LATENCY_WARMUP = 30
 DEFAULT_LATENCY_ITERS = 200
@@ -155,6 +162,32 @@ def _compute_feature_stats(dataset: FeatureSequenceDataset, indices: list[int], 
     return mean.to(dtype=torch.float32), std.to(dtype=torch.float32)
 
 
+def _cached_feature_stats(
+    dataset: FeatureSequenceDataset,
+    indices: list[int],
+    output_dir: Path,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    mean_path = output_dir / "shared_feature_mean.pt"
+    std_path = output_dir / "shared_feature_std.pt"
+    expected_dim = int(dataset[indices[0]][0].shape[-1])
+    if mean_path.exists() and std_path.exists():
+        try:
+            mean = torch.load(mean_path, map_location="cpu", weights_only=True)
+            std = torch.load(std_path, map_location="cpu", weights_only=True)
+            if mean.ndim == 1 and std.ndim == 1 and mean.numel() == expected_dim and std.numel() == expected_dim:
+                LOGGER.info("Reusing shared feature normalization cache (%d dimensions)", expected_dim)
+                return mean.to(dtype=torch.float32), std.to(dtype=torch.float32)
+            LOGGER.warning("Ignoring incompatible shared feature normalization cache")
+        except (OSError, RuntimeError, TypeError, ValueError) as exc:
+            LOGGER.warning("Could not load shared feature normalization cache: %s", exc)
+
+    LOGGER.info("Computing shared feature normalization statistics")
+    mean, std = _compute_feature_stats(dataset, indices)
+    torch.save(mean, mean_path)
+    torch.save(std, std_path)
+    return mean, std
+
+
 def _class_weights(labels: np.ndarray, num_classes: int = NUM_CLASSES) -> torch.Tensor:
     counts = np.bincount(labels.astype(np.int64), minlength=num_classes).astype(np.float64)
     weights = np.zeros_like(counts)
@@ -240,15 +273,16 @@ class MulticlassInferenceWrapper(nn.Module):
         feature_mean: torch.Tensor | None,
         feature_std: torch.Tensor | None,
         normalize: bool,
+        input_size: int,
     ) -> None:
         super().__init__()
         self.model = model
         self.normalize = bool(normalize)
 
         if feature_mean is None:
-            feature_mean = torch.zeros(1, 1, FEATURE_DIM, dtype=torch.float32)
+            feature_mean = torch.zeros(1, 1, input_size, dtype=torch.float32)
         if feature_std is None:
-            feature_std = torch.ones(1, 1, FEATURE_DIM, dtype=torch.float32)
+            feature_std = torch.ones(1, 1, input_size, dtype=torch.float32)
 
         self.register_buffer("feature_mean", feature_mean.to(dtype=torch.float32))
         self.register_buffer("feature_std", feature_std.to(dtype=torch.float32))
@@ -266,9 +300,12 @@ def _scripted_or_eager_module(
     feature_mean: torch.Tensor | None,
     feature_std: torch.Tensor | None,
     normalize: bool,
+    input_size: int,
 ) -> tuple[nn.Module, str]:
     def _make_wrapper(base_model: nn.Module) -> nn.Module:
-        return MulticlassInferenceWrapper(base_model.eval(), feature_mean, feature_std, normalize=normalize).eval()
+        return MulticlassInferenceWrapper(
+            base_model.eval(), feature_mean, feature_std, normalize=normalize, input_size=input_size
+        ).eval()
 
     wrapper = _make_wrapper(model)
     variant = "torchscript_fp32"
@@ -283,7 +320,7 @@ def _scripted_or_eager_module(
 
         if variant == "int8_dynamic":
             try:
-                probe = torch.zeros(1, 2, FEATURE_DIM, dtype=torch.float32)
+                probe = torch.zeros(1, 2, input_size, dtype=torch.float32)
                 with torch.no_grad():
                     _ = wrapper(probe)
             except Exception as exc:  # pragma: no cover - model-specific quantization fallback
@@ -303,9 +340,9 @@ def _scripted_or_eager_module(
         return wrapper, f"eager_fallback_{variant}"
 
 
-def _build_model_kwargs(model_name: str, sequence_length: int) -> dict[str, object]:
+def _build_model_kwargs(model_name: str, sequence_length: int, input_size: int) -> dict[str, object]:
     preset = dict(MODEL_PRESETS.get(model_name, {}))
-    preset.setdefault("input_size", FEATURE_DIM)
+    preset.setdefault("input_size", input_size)
     preset.setdefault("hidden_size", HIDDEN_SIZE)
     preset.setdefault("num_layers", 2)
     preset.setdefault("dropout", DROPOUT)
@@ -407,11 +444,18 @@ def _train_neural_model(
 ) -> dict[str, object]:
     run_dir = output_dir / model_name
     run_dir.mkdir(parents=True, exist_ok=True)
+    torch.set_num_threads(max(1, cpu_threads))
 
-    model_kwargs = _build_model_kwargs(model_name, sequence_length=int(dataset[train_indices[0]][0].shape[0]))
+    sample_sequence = dataset[train_indices[0]][0]
+    input_size = int(sample_sequence.shape[-1])
+    model_kwargs = _build_model_kwargs(
+        model_name,
+        sequence_length=int(sample_sequence.shape[0]),
+        input_size=input_size,
+    )
     model_kwargs.update(
         {
-            "input_size": FEATURE_DIM,
+            "input_size": input_size,
             "hidden_size": hidden_size,
             "num_layers": num_layers,
             "dropout": dropout,
@@ -598,6 +642,7 @@ def _train_neural_model(
         feature_mean=feature_mean_cpu,
         feature_std=feature_std_cpu,
         normalize=normalize_features,
+        input_size=input_size,
     )
     torch.set_num_threads(max(1, latency_threads))
     latency_model = _timer_ms(lambda: latency_module(sample_tensor.cpu()), warmup=latency_warmup, iters=latency_iters)
@@ -766,7 +811,8 @@ def _train_xgboost(
         num_class=NUM_CLASSES,
         n_estimators=800,
         learning_rate=0.05,
-        max_depth=5,
+        max_depth=4,
+        max_bin=64,
         min_child_weight=3.0,
         subsample=0.9,
         colsample_bytree=0.85,
@@ -980,6 +1026,7 @@ def run_experiment(
     kernel_size: int,
     tcn_blocks: int,
     cpu_threads: int,
+    xgb_threads: int,
     latency_threads: int,
     latency_warmup: int,
     latency_iters: int,
@@ -987,6 +1034,7 @@ def run_experiment(
     report_json: Path | None,
     report_csv: Path | None,
     history_jsonl: Path | None,
+    finalize_report: bool = True,
 ) -> dict[str, object]:
     _set_seed(RANDOM_SEED)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -1000,8 +1048,13 @@ def run_experiment(
     manifest["split"] = manifest["split"].astype(str).str.strip().str.lower()
     manifest["label"] = manifest["label"].astype(int)
     train_indices, val_indices, test_indices = _split_indices(manifest)
-    dataset = FeatureSequenceDataset(manifest_path)
-    feature_mean_cpu, feature_std_cpu = _compute_feature_stats(dataset, train_indices)
+    models_to_run = [name.strip().lower() for name in models if name.strip()]
+    needs_neural_dataset = any(model_name != "xgboost" for model_name in models_to_run)
+    dataset = FeatureSequenceDataset(manifest_path) if needs_neural_dataset else None
+    if dataset is not None:
+        feature_mean_cpu, feature_std_cpu = _cached_feature_stats(dataset, train_indices, output_dir)
+    else:
+        feature_mean_cpu = feature_std_cpu = None
 
     LOGGER.info(
         "Loaded manifest | rows=%d videos=%s train=%d val=%d test=%d device=%s",
@@ -1015,8 +1068,6 @@ def run_experiment(
 
     device_obj = _resolve_device(device)
     items: list[dict[str, object]] = []
-    models_to_run = [name.strip().lower() for name in models if name.strip()]
-
     for model_name in models_to_run:
         LOGGER.info("=== Running model: %s ===", model_name)
         try:
@@ -1031,7 +1082,7 @@ def run_experiment(
                     dim_reduction=dim_reduction,
                     dim_components=dim_components,
                     oversample=oversample,
-                    cpu_threads=cpu_threads,
+                    cpu_threads=xgb_threads,
                     latency_threads=latency_threads,
                     latency_warmup=latency_warmup,
                     latency_iters=latency_iters,
@@ -1039,6 +1090,8 @@ def run_experiment(
                     seed=RANDOM_SEED,
                 )
             else:
+                if dataset is None:
+                    raise RuntimeError("Neural model requested without an initialized sequence dataset")
                 item = _train_neural_model(
                     model_name,
                     manifest,
@@ -1086,13 +1139,162 @@ def run_experiment(
                 torch.cuda.empty_cache()
             gc.collect()
 
-    payload = _finalize_report(items, output_dir, report_json, report_csv, history_jsonl, manifest, models_to_run)
-    return payload
+    if finalize_report:
+        return _finalize_report(items, output_dir, report_json, report_csv, history_jsonl, manifest, models_to_run)
+    return {"items": items}
+
+
+def _format_subprocess_failure(model_name: str, returncode: int) -> str:
+    if returncode < 0:
+        try:
+            signal_name = signal.Signals(-returncode).name
+        except ValueError:
+            signal_name = f"signal {-returncode}"
+        return f"isolated worker for {model_name} was terminated by {signal_name}"
+    return f"isolated worker for {model_name} exited with code {returncode}"
+
+
+def _run_isolated_experiment(args: argparse.Namespace) -> dict[str, object]:
+    """Run each model in its own process so an OOM cannot abort train-all."""
+    output_dir = args.output_dir
+    output_dir.mkdir(parents=True, exist_ok=True)
+    models = [name.strip().lower() for name in args.models if name.strip()]
+    items: list[dict[str, object]] = []
+
+    common_args = [
+        "--manifest", str(args.manifest),
+        "--output-dir", str(output_dir),
+        "--device", args.device,
+        "--batch-size", str(args.batch_size),
+        "--epochs", str(args.epochs),
+        "--patience", str(args.patience),
+        "--min-epochs", str(args.min_epochs),
+        "--lr", str(args.lr),
+        "--weight-decay", str(args.weight_decay),
+        "--objective", args.objective,
+        "--feature-mode", args.feature_mode,
+        "--dim-reduction", args.dim_reduction,
+        "--dim-components", str(args.dim_components),
+        "--oversample", args.oversample,
+        "--hidden-size", str(args.hidden_size),
+        "--num-layers", str(args.num_layers),
+        "--dropout", str(args.dropout),
+        "--num-heads", str(args.num_heads),
+        "--kernel-size", str(args.kernel_size),
+        "--tcn-blocks", str(args.tcn_blocks),
+        "--cpu-threads", str(args.cpu_threads),
+        "--xgb-threads", str(args.xgb_threads),
+        "--latency-threads", str(args.latency_threads),
+        "--latency-warmup", str(args.latency_warmup),
+        "--latency-iters", str(args.latency_iters),
+        "--isolated-worker",
+    ]
+    if args.no_amp:
+        common_args.append("--no-amp")
+
+    worker_env = dict(os.environ)
+    thread_count = str(max(1, args.cpu_threads))
+    worker_env.update(
+        {
+            "OMP_NUM_THREADS": thread_count,
+            "MKL_NUM_THREADS": thread_count,
+            "OPENBLAS_NUM_THREADS": thread_count,
+            "NUMEXPR_NUM_THREADS": thread_count,
+        }
+    )
+
+    progress_path = output_dir / "train_all_progress.json"
+    for position, model_name in enumerate(models, start=1):
+        summary_path = output_dir / model_name / "summary.json"
+        if args.resume and summary_path.exists():
+            try:
+                cached = json.loads(summary_path.read_text(encoding="utf-8"))
+                if cached.get("status") == "success":
+                    LOGGER.info("[%d/%d] Resuming: model %s is already complete", position, len(models), model_name)
+                    items.append(cached)
+                    progress_path.write_text(
+                        json.dumps({"models_requested": models, "items": items}, indent=2), encoding="utf-8"
+                    )
+                    continue
+            except (OSError, json.JSONDecodeError):
+                pass
+
+        LOGGER.info("[%d/%d] Starting isolated model: %s", position, len(models), model_name)
+        model_dir = output_dir / model_name
+        model_dir.mkdir(parents=True, exist_ok=True)
+        command = [
+            sys.executable,
+            "-u",
+            "-m",
+            "engagement_daisee.multiclass.train_all",
+            "--models",
+            model_name,
+            *common_args,
+            "--report-json",
+            str(model_dir / "worker_report.json"),
+            "--report-csv",
+            str(model_dir / "worker_report.csv"),
+            "--history-jsonl",
+            str(model_dir / "worker_history.jsonl"),
+        ]
+        model_env = dict(worker_env)
+        if model_name == "xgboost":
+            xgb_thread_count = str(max(1, args.xgb_threads))
+            model_env.update(
+                {
+                    "OMP_NUM_THREADS": xgb_thread_count,
+                    "MKL_NUM_THREADS": xgb_thread_count,
+                    "OPENBLAS_NUM_THREADS": xgb_thread_count,
+                    "NUMEXPR_NUM_THREADS": xgb_thread_count,
+                }
+            )
+        completed = subprocess.run(command, env=model_env, check=False)
+
+        item: dict[str, object]
+        if completed.returncode == 0 and summary_path.exists():
+            try:
+                item = json.loads(summary_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as exc:
+                item = {
+                    "model_name": model_name,
+                    "model_family": "ml" if model_name == "xgboost" else "neural",
+                    "status": "failed",
+                    "error": f"worker produced an invalid summary: {exc}",
+                }
+        else:
+            item = {
+                "model_name": model_name,
+                "model_family": "ml" if model_name == "xgboost" else "neural",
+                "status": "failed",
+                "error": _format_subprocess_failure(model_name, completed.returncode),
+                "returncode": int(completed.returncode),
+            }
+            summary_path.write_text(json.dumps(item, indent=2), encoding="utf-8")
+            LOGGER.error("Model %s failed, continuing with the remaining models: %s", model_name, item["error"])
+
+        items.append(item)
+        progress_path.write_text(
+            json.dumps({"models_requested": models, "completed": position, "total": len(models), "items": items}, indent=2),
+            encoding="utf-8",
+        )
+
+    manifest = normalize_manifest_columns(pd.read_csv(args.manifest, low_memory=False))
+    manifest["split"] = manifest["split"].astype(str).str.strip().str.lower()
+    manifest["label"] = manifest["label"].astype(int)
+    return _finalize_report(
+        items,
+        output_dir,
+        args.report_json,
+        args.report_csv,
+        args.history_jsonl,
+        manifest,
+        models,
+    )
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Train and evaluate all DAiSEE 4-class feature models.")
-    parser.add_argument("--manifest", type=Path, default=FEATURE_MANIFEST_CSV, help="4-class feature manifest")
+    parser.add_argument("--manifest", type=Path, default=FOUR_CLASS_FEATURE_MANIFEST_CSV, help="4-class feature manifest")
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR, help="Directory for run artifacts")
     parser.add_argument("--models", nargs="+", default=DEFAULT_MODELS, help="Ordered list of models to train")
     parser.add_argument("--device", type=str, default=DEFAULT_DEVICE, help="auto | cpu | cuda | cuda:0")
@@ -1126,10 +1328,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--kernel-size", type=int, default=5, help="Kernel size for TCN/CNN fusion")
     parser.add_argument("--tcn-blocks", type=int, default=4, help="TCN block count")
     parser.add_argument("--cpu-threads", type=int, default=DEFAULT_CPU_THREADS, help="PyTorch CPU threads")
+    parser.add_argument("--xgb-threads", type=int, default=DEFAULT_XGB_THREADS, help="XGBoost CPU threads")
     parser.add_argument("--latency-threads", type=int, default=DEFAULT_LATENCY_THREADS, help="CPU threads for latency benchmark")
     parser.add_argument("--latency-warmup", type=int, default=DEFAULT_LATENCY_WARMUP, help="Latency warmup iterations")
     parser.add_argument("--latency-iters", type=int, default=DEFAULT_LATENCY_ITERS, help="Latency benchmark iterations")
     parser.add_argument("--no-amp", action="store_true", help="Disable AMP even on CUDA")
+    parser.add_argument(
+        "--isolate-models",
+        action="store_true",
+        help="Run every model in a separate worker process and continue after worker crashes/OOM",
+    )
+    parser.add_argument("--resume", action="store_true", help="Skip successful model summaries already in output-dir")
+    parser.add_argument("--isolated-worker", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--report-json", type=Path, default=DEFAULT_REPORT_JSON, help="Aggregate report JSON output")
     parser.add_argument("--report-csv", type=Path, default=DEFAULT_REPORT_CSV, help="Aggregate report CSV output")
     parser.add_argument("--history-jsonl", type=Path, default=DEFAULT_HISTORY_JSONL, help="Aggregate history JSONL output")
@@ -1139,6 +1349,22 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     _setup_logging()
     args = parse_args()
+    if args.isolate_models and not args.isolated_worker:
+        payload = _run_isolated_experiment(args)
+        print(
+            json.dumps(
+                {
+                    "successful": payload.get("successful"),
+                    "failed": payload.get("failed"),
+                    "failed_models": payload.get("failed_models"),
+                    "summary": str(args.output_dir / "train_all_summary.json"),
+                    "report_json": str(args.report_json),
+                    "report_csv": str(args.report_csv),
+                },
+                indent=2,
+            )
+        )
+        return
     payload = run_experiment(
         manifest_path=args.manifest,
         output_dir=args.output_dir,
@@ -1162,6 +1388,7 @@ def main() -> None:
         kernel_size=args.kernel_size,
         tcn_blocks=args.tcn_blocks,
         cpu_threads=args.cpu_threads,
+        xgb_threads=args.xgb_threads,
         latency_threads=args.latency_threads,
         latency_warmup=args.latency_warmup,
         latency_iters=args.latency_iters,
@@ -1169,8 +1396,17 @@ def main() -> None:
         report_json=args.report_json,
         report_csv=args.report_csv,
         history_jsonl=args.history_jsonl,
+        finalize_report=not args.isolated_worker,
     )
-    print(json.dumps(payload, indent=2))
+    if args.isolated_worker:
+        worker_items = payload.get("items") or []
+        compact = [
+            {"model_name": item.get("model_name"), "status": item.get("status"), "error": item.get("error")}
+            for item in worker_items
+        ]
+        print(json.dumps({"worker_items": compact}))
+    else:
+        print(json.dumps(payload, indent=2))
 
 
 if __name__ == "__main__":

@@ -6,9 +6,9 @@ CONDA_ENV="thesis"
 WORKDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/.."
 LOG_DIR="$WORKDIR/logs"
 LATEST_LOG_LINK="$LOG_DIR/latest_accuracy_targeted_xgb_4class.log"
-MANIFEST="$WORKDIR/data/processed/runs/daisee_4class_final_dataset/feature_manifest.csv"
+MANIFEST=""
 COMMAND="start"
-CPU_THREADS=4
+CPU_THREADS=8
 N_ESTIMATORS=1400
 ROUND_STEP=25
 FEATURE_MODE="tsfresh"
@@ -18,6 +18,18 @@ ONLY_CANDIDATES="strong_weight_d6"
 
 shell_quote() {
   printf "%q" "$1"
+}
+
+resolve_latest_depth_manifest() {
+  local latest
+  latest="$(find "$WORKDIR/data/processed/runs" -maxdepth 2 -type f -name feature_manifest.csv \
+    -path '*/extract_depth_robust*/*' -printf '%T@ %p\n' 2>/dev/null \
+    | sort -nr | head -1 | cut -d' ' -f2-)"
+  if [[ -n "$latest" ]]; then
+    printf '%s\n' "$latest"
+    return 0
+  fi
+  printf '%s\n' "$WORKDIR/data/processed/runs/extract_depth_robust_5w_20260620_061230/feature_manifest.csv"
 }
 
 while [[ $# -gt 0 ]]; do
@@ -36,6 +48,10 @@ while [[ $# -gt 0 ]]; do
     *) echo "Unknown argument: $1"; exit 1 ;;
   esac
 done
+
+if [[ -z "$MANIFEST" ]]; then
+  MANIFEST="$(resolve_latest_depth_manifest)"
+fi
 
 mkdir -p "$LOG_DIR" "$WORKDIR/checkpoints/runs"
 
