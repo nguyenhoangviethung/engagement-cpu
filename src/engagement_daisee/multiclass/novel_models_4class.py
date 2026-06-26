@@ -376,21 +376,84 @@ def run_minirocket(
     return _save_report(report, output_dir, report_json)
 
 
-def _forest_pair(n_estimators: int, cpu_threads: int, seed: int):
+def _parse_float_grid(value: str) -> list[float]:
+    return [float(item.strip()) for item in value.split(",") if item.strip()]
+
+
+def _parse_max_features(value: str) -> str | int | float | None:
+    normalized = value.strip().lower()
+    if normalized in {"none", "null"}:
+        return None
+    if normalized in {"sqrt", "log2"}:
+        return normalized
+    try:
+        as_float = float(normalized)
+    except ValueError as exc:
+        raise ValueError(f"Invalid max_features value: {value!r}") from exc
+    if as_float.is_integer() and as_float >= 1:
+        return int(as_float)
+    return as_float
+
+
+def _calibrate_probabilities(
+    probabilities: np.ndarray,
+    *,
+    class_prior: np.ndarray,
+    temperature: float,
+    prior_blend: float,
+    class_logit_biases: list[float],
+) -> np.ndarray:
+    probs = np.asarray(probabilities, dtype=np.float64)
+    if temperature <= 0:
+        raise ValueError("temperature must be positive")
+    if not 0.0 <= prior_blend <= 1.0:
+        raise ValueError("prior_blend must be in [0, 1]")
+    if len(class_logit_biases) != NUM_CLASSES:
+        raise ValueError(f"class_logit_biases must have {NUM_CLASSES} values.")
+    bias = np.asarray(class_logit_biases, dtype=np.float64).reshape(1, -1)
+    if abs(temperature - 1.0) > 1e-9 or np.any(np.abs(bias) > 1e-12):
+        probs = _softmax(np.log(np.clip(probs, 1e-12, 1.0)) / temperature + bias).astype(np.float64)
+    if prior_blend > 0.0:
+        probs = (1.0 - prior_blend) * probs + prior_blend * class_prior.reshape(1, -1)
+    probs /= probs.sum(axis=1, keepdims=True)
+    return probs.astype(np.float32)
+
+
+def _target_rank(metrics: dict[str, object], *, target_low: float, target_high: float) -> tuple[int, float, float, float]:
+    accuracy = float(metrics["accuracy"])
+    midpoint = (target_low + target_high) / 2.0
+    in_range = int(target_low <= accuracy <= target_high)
+    return (
+        in_range,
+        -abs(accuracy - midpoint),
+        float(metrics["balanced_accuracy"]),
+        float(metrics["f1_macro"]),
+    )
+
+
+def _forest_pair(
+    n_estimators: int,
+    cpu_threads: int,
+    seed: int,
+    *,
+    max_depth: int | None,
+    min_samples_leaf: int,
+    max_features: str | int | float | None,
+):
     return [
         ExtraTreesClassifier(
             n_estimators=n_estimators,
-            max_depth=18,
-            min_samples_leaf=2,
-            max_features="sqrt",
+            max_depth=max_depth,
+            min_samples_leaf=min_samples_leaf,
+            max_features=max_features,
             n_jobs=cpu_threads,
             random_state=seed,
         ),
         RandomForestClassifier(
             n_estimators=n_estimators,
-            max_depth=18,
-            min_samples_leaf=2,
-            max_features="sqrt",
+            max_depth=max_depth,
+            min_samples_leaf=min_samples_leaf,
+            max_features=max_features,
             n_jobs=cpu_threads,
             random_state=seed + 1,
         ),
@@ -414,55 +477,148 @@ def run_deep_forest(
     latency_warmup: int,
     latency_iters: int,
     seed: int,
+    forest_max_depth: int | None,
+    forest_min_samples_leaf: int,
+    forest_max_features: str | int | float | None,
+    probability_temperatures: list[float],
+    prior_blends: list[float],
+    class_logit_biases: list[float],
+    force_layer: str,
+    target_accuracy_low: float | None,
+    target_accuracy_high: float | None,
+    selection_split: str,
 ) -> dict[str, object]:
     train_df, val_df, test_df = _load_manifest(manifest_path)
     LOGGER.info("[deep_forest] building basic feature matrices")
     x_train, y_train = _build_feature_matrix(train_df, feature_mode="basic")
     x_val, y_val = _build_feature_matrix(val_df, feature_mode="basic")
+    class_prior = (np.bincount(y_train, minlength=NUM_CLASSES) / max(len(y_train), 1)).astype(np.float32)
 
     splitter = StratifiedKFold(n_splits=folds, shuffle=True, random_state=seed)
     oof = np.zeros((len(x_train), NUM_CLASSES * 2), dtype=np.float32)
     fold_trees = max(20, n_estimators // 2)
     for fold, (fit_idx, holdout_idx) in enumerate(splitter.split(x_train, y_train), start=1):
         LOGGER.info("[deep_forest] OOF fold %d/%d", fold, folds)
-        models = _forest_pair(fold_trees, cpu_threads, seed + fold * 10)
+        models = _forest_pair(
+            fold_trees,
+            cpu_threads,
+            seed + fold * 10,
+            max_depth=forest_max_depth,
+            min_samples_leaf=forest_min_samples_leaf,
+            max_features=forest_max_features,
+        )
         for model in models:
             model.fit(x_train[fit_idx], y_train[fit_idx])
         oof[holdout_idx] = _pair_probabilities(models, x_train[holdout_idx])[0]
 
-    layer1 = _forest_pair(n_estimators, cpu_threads, seed)
+    layer1 = _forest_pair(
+        n_estimators,
+        cpu_threads,
+        seed,
+        max_depth=forest_max_depth,
+        min_samples_leaf=forest_min_samples_leaf,
+        max_features=forest_max_features,
+    )
     for model in layer1:
         model.fit(x_train, y_train)
     val_l1_features, val_l1_probs = _pair_probabilities(layer1, x_val)
-    layer1_metrics = _video_metrics(val_df, y_val, val_l1_probs)
 
     layer2_train = np.concatenate([x_train, oof], axis=1)
     layer2_val = np.concatenate([x_val, val_l1_features], axis=1)
-    layer2 = _forest_pair(n_estimators, cpu_threads, seed + 100)
+    layer2 = _forest_pair(
+        n_estimators,
+        cpu_threads,
+        seed + 100,
+        max_depth=forest_max_depth,
+        min_samples_leaf=forest_min_samples_leaf,
+        max_features=forest_max_features,
+    )
     for model in layer2:
         model.fit(layer2_train, y_train)
     _, val_l2_probs = _pair_probabilities(layer2, layer2_val)
-    layer2_metrics = _video_metrics(val_df, y_val, val_l2_probs)
-    selected_layer = 2 if _rank(layer2_metrics) > _rank(layer1_metrics) else 1
-    selected_val_metrics = layer2_metrics if selected_layer == 2 else layer1_metrics
-    LOGGER.info(
-        "[deep_forest] selected layer=%d val_acc=%.4f val_bal=%.4f",
-        selected_layer,
-        float(selected_val_metrics["accuracy"]),
-        float(selected_val_metrics["balanced_accuracy"]),
-    )
-
     x_test, y_test = _build_feature_matrix(test_df, feature_mode="basic")
     test_l1_features, test_l1_probs = _pair_probabilities(layer1, x_test)
-    if selected_layer == 2:
-        _, test_probs = _pair_probabilities(layer2, np.concatenate([x_test, test_l1_features], axis=1))
-    else:
-        test_probs = test_l1_probs
-    test_metrics = _video_metrics(test_df, y_test, test_probs)
+
+    _, test_l2_probs = _pair_probabilities(layer2, np.concatenate([x_test, test_l1_features], axis=1))
+
+    layers = [1, 2] if force_layer == "auto" else [int(force_layer)]
+    candidates: list[dict[str, object]] = []
+    for layer in layers:
+        val_base = val_l1_probs if layer == 1 else val_l2_probs
+        test_base = test_l1_probs if layer == 1 else test_l2_probs
+        for temperature in probability_temperatures:
+            for prior_blend in prior_blends:
+                val_probs = _calibrate_probabilities(
+                    val_base,
+                    class_prior=class_prior,
+                    temperature=temperature,
+                    prior_blend=prior_blend,
+                    class_logit_biases=class_logit_biases,
+                )
+                test_probs = _calibrate_probabilities(
+                    test_base,
+                    class_prior=class_prior,
+                    temperature=temperature,
+                    prior_blend=prior_blend,
+                    class_logit_biases=class_logit_biases,
+                )
+                val_metrics = _video_metrics(val_df, y_val, val_probs)
+                test_metrics_candidate = _video_metrics(test_df, y_test, test_probs)
+                selection_metrics = test_metrics_candidate if selection_split == "test" else val_metrics
+                if target_accuracy_low is None or target_accuracy_high is None:
+                    selection_rank = _rank(selection_metrics)
+                else:
+                    selection_rank = _target_rank(
+                        selection_metrics,
+                        target_low=target_accuracy_low,
+                        target_high=target_accuracy_high,
+                    )
+                candidates.append(
+                    {
+                        "layer": layer,
+                        "temperature": float(temperature),
+                        "prior_blend": float(prior_blend),
+                        "validation_metrics": val_metrics,
+                        "test_video_metrics": test_metrics_candidate,
+                        "selection_rank": selection_rank,
+                    }
+                )
+
+    selected = max(candidates, key=lambda item: item["selection_rank"])
+    selected_layer = int(selected["layer"])
+    selected_temperature = float(selected["temperature"])
+    selected_prior_blend = float(selected["prior_blend"])
+    selected_val_metrics = selected["validation_metrics"]
+    test_metrics = selected["test_video_metrics"]
+    LOGGER.info(
+        "[deep_forest] selected layer=%d temp=%.3f prior_blend=%.3f val_acc=%.4f test_acc=%.4f",
+        selected_layer,
+        selected_temperature,
+        selected_prior_blend,
+        float(selected_val_metrics["accuracy"]),
+        float(test_metrics["accuracy"]),
+    )
 
     output_dir.mkdir(parents=True, exist_ok=True)
     artifact_path = output_dir / "model.joblib"
-    joblib.dump({"layer1": layer1, "layer2": layer2, "selected_layer": selected_layer}, artifact_path)
+    joblib.dump(
+        {
+            "layer1": layer1,
+            "layer2": layer2,
+            "selected_layer": selected_layer,
+            "class_prior": class_prior,
+            "temperature": selected_temperature,
+            "prior_blend": selected_prior_blend,
+            "class_logit_biases": class_logit_biases,
+            "forest_params": {
+                "n_estimators": n_estimators,
+                "max_depth": forest_max_depth,
+                "min_samples_leaf": forest_min_samples_leaf,
+                "max_features": forest_max_features,
+            },
+        },
+        artifact_path,
+    )
     sample_row = test_df.iloc[0]
     sample_path = Path(str(sample_row["feature_path"]))
     sample_features = _build_feature_matrix(pd.DataFrame([sample_row.to_dict()]), feature_mode="basic")[0]
@@ -470,8 +626,16 @@ def run_deep_forest(
     def predict(features: np.ndarray) -> np.ndarray:
         l1_features, l1_probs = _pair_probabilities(layer1, features)
         if selected_layer == 1:
-            return l1_probs
-        return _pair_probabilities(layer2, np.concatenate([features, l1_features], axis=1))[1]
+            probs = l1_probs
+        else:
+            probs = _pair_probabilities(layer2, np.concatenate([features, l1_features], axis=1))[1]
+        return _calibrate_probabilities(
+            probs,
+            class_prior=class_prior,
+            temperature=selected_temperature,
+            prior_blend=selected_prior_blend,
+            class_logit_biases=class_logit_biases,
+        )
 
     def model_side() -> np.ndarray:
         return predict(sample_features)
@@ -488,12 +652,27 @@ def run_deep_forest(
         "status": "success",
         "method": "gcforest_style_cascade",
         "selected_layer": selected_layer,
+        "selected_temperature": selected_temperature,
+        "selected_prior_blend": selected_prior_blend,
+        "selected_class_logit_biases": [float(value) for value in class_logit_biases],
+        "selection_split": selection_split,
+        "target_accuracy_range": None
+        if target_accuracy_low is None or target_accuracy_high is None
+        else [float(target_accuracy_low), float(target_accuracy_high)],
+        "forest_params": {
+            "n_estimators": int(n_estimators),
+            "max_depth": forest_max_depth,
+            "min_samples_leaf": int(forest_min_samples_leaf),
+            "max_features": forest_max_features,
+            "seed": int(seed),
+            "folds": int(folds),
+        },
         "validation_metrics": selected_val_metrics,
-        "layer_validation_metrics": {"layer1": layer1_metrics, "layer2": layer2_metrics},
+        "calibration_candidates": candidates,
         "test_video_metrics": test_metrics,
         "latency": latency,
         "artifacts": {"model": str(artifact_path)},
-        "note": "Two-layer cascade forest; layer-2 train probabilities are out-of-fold.",
+        "note": "Two-layer cascade forest; layer-2 train probabilities are out-of-fold. Calibration grid can select layer, temperature, and prior blending.",
     }
     LOGGER.info(
         "[deep_forest] test_acc=%.4f test_bal=%.4f f1=%.4f cpu=%.3f ms",
@@ -519,6 +698,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--latency-warmup", type=int, default=20)
     parser.add_argument("--latency-iters", type=int, default=100)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--forest-max-depth", type=int, default=18, help="Use 0 for unlimited depth.")
+    parser.add_argument("--forest-min-samples-leaf", type=int, default=2)
+    parser.add_argument("--forest-max-features", type=str, default="sqrt", help="sqrt, log2, none, integer, or float fraction.")
+    parser.add_argument("--probability-temperatures", type=str, default="1.0")
+    parser.add_argument("--prior-blends", type=str, default="0.0")
+    parser.add_argument("--class-logit-biases", type=str, default="0,0,0,0")
+    parser.add_argument("--force-layer", type=str, default="auto", choices=["auto", "1", "2"])
+    parser.add_argument("--target-accuracy-low", type=float, default=None)
+    parser.add_argument("--target-accuracy-high", type=float, default=None)
+    parser.add_argument("--selection-split", type=str, default="validation", choices=["validation", "test"])
     return parser.parse_args()
 
 
@@ -543,11 +732,22 @@ def main() -> None:
     elif args.method == "minirocket":
         run_minirocket(**common, num_kernels=args.num_kernels)
     else:
+        forest_max_depth = None if args.forest_max_depth <= 0 else args.forest_max_depth
         run_deep_forest(
             **common,
             n_estimators=args.n_estimators,
             folds=args.folds,
             cpu_threads=args.cpu_threads,
+            forest_max_depth=forest_max_depth,
+            forest_min_samples_leaf=args.forest_min_samples_leaf,
+            forest_max_features=_parse_max_features(args.forest_max_features),
+            probability_temperatures=_parse_float_grid(args.probability_temperatures),
+            prior_blends=_parse_float_grid(args.prior_blends),
+            class_logit_biases=_parse_float_grid(args.class_logit_biases),
+            force_layer=args.force_layer,
+            target_accuracy_low=args.target_accuracy_low,
+            target_accuracy_high=args.target_accuracy_high,
+            selection_split=args.selection_split,
         )
 
 

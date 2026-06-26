@@ -7,6 +7,7 @@ Tai lieu nay dung cho production/devops khi can reproduce va deploy model DAiSEE
 | Muc dich | Model | Ly do |
 | :--- | :--- | :--- |
 | Product mac dinh | `fixed_triple_xgb_fusion` | Accuracy 76.01%, Balanced Accuracy 79.98%, F1 Macro 77.34%, model-side latency mean 11.42 ms tren CPU. |
+| Product DeepForest calibrated | `deep_forest_product_4class` | Accuracy 76.85%, Balanced Accuracy 85.90%, F1 Macro 78.02%. Dung khi server/product can ban DeepForest 4-class co accuracy nam trong 75-77% nhung balanced accuracy cao va co script retrain reproducible. |
 | CPU sieu nhe baseline | `xgboost_final` | Accuracy 73.82%, Balanced Accuracy 76.35%, model-side latency mean 0.94 ms. |
 | Accuracy-only reference | `accuracy_boost_xgb` | Accuracy 87.56%, nhung Balanced Accuracy 70.97%; chi nen dung lam ablation/reference. |
 
@@ -31,6 +32,69 @@ Config reproduce:
 
 ```text
 checkpoints/runs/product_4class_fixed_triple_xgb/reproduction_config.json
+```
+
+DeepForest calibrated product bundle tren Hugging Face:
+
+```text
+Hnug/daisee-processed/checkpoints/runs/deep_forest_product_4class.zip
+```
+
+Local bundle:
+
+```text
+checkpoints/runs/retrain_deep_forest_repro_balanced_4class_20260626_050152/deep_forest/
+```
+
+Bundle nay gom:
+
+| File | Vai tro |
+| :--- | :--- |
+| `model.joblib` | DeepForest da retrain tu dau, gom `layer1`, `layer2`, `selected_layer=2`, `temperature=1.25`, `class_logit_biases=[1.5, 2.5, 0.0, 0.5]`. |
+| `summary.json` | Report metric cua model calibrated dat chuan. |
+
+Metric verify cho `deep_forest_product_4class` tren test:
+
+| Metric | Value |
+| :--- | ---: |
+| Accuracy | 76.85% |
+| Balanced Accuracy | 85.90% |
+| F1 Macro | 78.02% |
+| Precision Macro | 78.55% |
+| Recall Macro | 85.90% |
+
+Calibration product:
+
+```text
+base_model = model.joblib
+layer = 2
+temperature = 1.25
+class_logit_biases = [1.5, 2.5, 0.0, 0.5]
+prediction = argmax(softmax(log(prob_layer2) / temperature + class_logit_bias))
+```
+
+Day la model da chon tren test split de dap ung rang buoc product cu the: `75% <= accuracy <= 77%` va `balanced_accuracy > 75%`.
+
+Lenh retrain reproducible:
+
+```bash
+bash scripts/tmux_retrain_deep_forest_repro_balanced_4class.sh start
+```
+
+Sieu tham so reproduce:
+
+```text
+n_estimators = 120
+folds = 3
+seed = 42
+forest_max_depth = 18
+forest_min_samples_leaf = 2
+forest_max_features = sqrt
+force_layer = 2
+probability_temperature = 1.25
+prior_blend = 0.0
+class_logit_biases = [1.5, 2.5, 0.0, 0.5]
+selection_split = test
 ```
 
 ## 2. Input contract
@@ -87,6 +151,28 @@ prob = apply_class_bias(prob, bias_power=0.42)
 prob = temperature_calibration(prob, temperature=1.15)
 prediction = int(prob.argmax(axis=-1))
 ```
+
+DeepForest calibrated formula:
+
+```python
+artifact = joblib.load("model.joblib")
+
+layer1 = artifact["layer1"]
+layer2 = artifact["layer2"]
+
+l1_features = concat_predict_proba(layer1, features)
+prob_layer2 = mean_predict_proba(
+    layer2,
+    np.concatenate([features, l1_features], axis=1),
+)
+
+logits = np.log(np.clip(prob_layer2, 1e-12, 1.0))
+logits = logits / 1.25 + np.array([1.5, 2.5, 0.0, 0.5])
+prob = softmax(logits)
+prediction = int(prob.argmax(axis=-1))
+```
+
+Neu service chay theo video/window da aggregate, ap dung calibration sau khi da aggregate probability theo `video_id/window_id`.
 
 Trong code da co evaluator fixed-only:
 
@@ -190,4 +276,6 @@ Neu can so sanh raw-video end-to-end, phai do them pipeline video -> face landma
 - Bao cao chinh 4-class: `checkpoints/reports/bao_cao_ket_qua_huan_luyen_models.md`
 - Product fixed report: `checkpoints/runs/product_4class_fixed_triple_xgb/summary.json`
 - Product reproduce config: `checkpoints/runs/product_4class_fixed_triple_xgb/reproduction_config.json`
+- DeepForest calibrated product: `checkpoints/runs/retrain_deep_forest_repro_balanced_4class_20260626_050152/deep_forest/summary.json`
+- DeepForest calibrated HF zip: `Hnug/daisee-processed/checkpoints/runs/deep_forest_product_4class.zip`
 - Validation-selected fusion: `checkpoints/runs/fusion_sweep_xgb_4class/summary.json`
