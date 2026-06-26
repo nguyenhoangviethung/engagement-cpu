@@ -1,3 +1,15 @@
+---
+pretty_name: DAiSEE 4-class Engagement Product
+language:
+  - vi
+tags:
+  - daisee
+  - engagement-recognition
+  - deepforest
+  - mediapipe
+  - depth-aware
+---
+
 # Engagement_DAiSEE
 
 Repo này tập trung vào bài toán **DAiSEE 4-class engagement recognition** trên **processed feature sequences**.
@@ -9,22 +21,23 @@ Mục tiêu chính:
 
 ## Trạng thái hiện tại
 
-- Dataset dùng cho product: `data/processed/runs/daisee_4class_final_dataset/feature_manifest.csv`
+- Dataset dùng cho product: `data/processed/final_feature_manifest.csv`
 - Label space: 4 lớp engagement gốc của DAiSEE
+- Feature chính cho các model nội bộ: `depth_robust_v2`
 - Input chính cho model product: processed feature sequence, không phải raw video
-- Model product hiện tại: `fixed_triple_xgb_fusion`
+- Model product hiện tại: `deep_forest_product_4class`
 - Metric product test:
-  - Accuracy `76.01%`
-  - Balanced Accuracy `79.98%`
-  - F1 Macro `77.34%`
-  - Model-side latency mean `11.42 ms`
-  - E2E latency mean `11.37 ms` trên processed feature sequence sample
+  - Accuracy `76.85%`
+  - Balanced Accuracy `85.90%`
+  - F1 Macro `78.02%`
+  - Model-side latency mean `204.07 ms`
+  - E2E latency mean `205.98 ms` trên processed feature sequence sample
+  - Raw-video end-to-end mean `5.32 s` trên MediaPipe FaceMesh -> `depth_robust_v2` -> DeepForest
 
 ## Artifact quan trọng
 
-- Product summary: `checkpoints/runs/product_4class_fixed_triple_xgb/summary.json`
-- Product reproduce config: `checkpoints/runs/product_4class_fixed_triple_xgb/reproduction_config.json`
-- Product artifact README: `checkpoints/runs/product_4class_fixed_triple_xgb/README.md`
+- Product summary: `checkpoints/runs/retrain_deep_forest_repro_balanced_4class_20260626_050152/deep_forest/summary.json`
+- Product artifact: `checkpoints/runs/retrain_deep_forest_repro_balanced_4class_20260626_050152/deep_forest/model.joblib`
 - Báo cáo chính: `checkpoints/reports/bao_cao_ket_qua_huan_luyen_models.md`
 - GUIDE production: `checkpoints/reports/GUIDE.md`
 
@@ -32,12 +45,11 @@ Mục tiêu chính:
 
 - `src/engagement_daisee/multiclass/`
   - các pipeline 4-class mới
-  - `fusion_fixed_xgb.py`: model product
-  - `fusion_sweep_xgb.py`: chọn fusion theo validation
+  - `novel_models_4class.py`: DeepForest / ordinal / minirocket
+  - `fusion_sweep_xgb.py`: chọn fusion theo sweep
   - `accuracy_targeted_xgb.py`: tune theo mục tiêu accuracy/balanced accuracy
   - `inception_lite_experiment.py`: Inception-lite + XGBoost fusion
   - `late_fusion.py`: late fusion nhiều nhánh
-  - `novel_models_4class.py`: các hướng model khác như ordinal / minirocket / deep forest
   - `train_all.py`: train/eval toàn bộ model 4-class
 
 - `src/engagement_daisee/rnn/`
@@ -52,7 +64,7 @@ Mục tiêu chính:
 ## Chạy lại product model
 
 ```bash
-bash scripts/reproduce_product_4class.sh
+bash scripts/tmux_retrain_deep_forest_repro_balanced_4class.sh start
 ```
 
 ## Chạy train/all cho 4-class
@@ -83,7 +95,7 @@ Nếu cần so sánh với paper, xem:
 
 Artifact product đã được đóng gói dạng zip và đẩy lên:
 - `Hnug/daisee-processed`
-- remote path: `product_4class_fixed_triple_xgb/product_4class_fixed_triple_xgb.zip`
+- remote path: `checkpoints/runs/deep_forest_product_4class.zip`
 
 ## Dữ liệu raw
 
