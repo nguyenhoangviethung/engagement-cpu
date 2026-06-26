@@ -3,9 +3,9 @@
 Repo này tập trung vào bài toán **DAiSEE 4-class engagement recognition** trên **processed feature sequences**.
 
 Mục tiêu chính:
-- train / val / test trong cùng một run
 - lưu đầy đủ metric và latency để so sánh
 - có một model product có thể reproduce và deploy lại trên CPU
+- tách rõ phần nghiên cứu mô hình và phần ứng dụng triển khai
 
 ## Trạng thái hiện tại
 
@@ -33,7 +33,7 @@ Mục tiêu chính:
 - `src/engagement_daisee/multiclass/`
   - các pipeline 4-class mới
   - `fusion_fixed_xgb.py`: model product
-  - `fusion_sweep_xgb.py`: chọn fusion theo validation
+  - `fusion_sweep_xgb.py`: tìm cấu hình fusion tốt hơn cho quá trình phát triển
   - `accuracy_targeted_xgb.py`: tune theo mục tiêu accuracy/balanced accuracy
   - `inception_lite_experiment.py`: Inception-lite + XGBoost fusion
   - `late_fusion.py`: late fusion nhiều nhánh

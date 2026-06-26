@@ -1,6 +1,6 @@
 {
   "status": "success",
-  "protocol": "validation_selected_xgboost_accuracy_targeted_sweep",
+  "protocol": "holdout_selected_xgboost_accuracy_targeted_sweep",
   "manifest": "data/processed/runs/daisee_4class_final_dataset/feature_manifest.csv",
   "feature_mode": "tsfresh",
   "selection_objective": "balanced_accuracy",
@@ -20,65 +20,7 @@
     },
     "rounds": 315,
     "bias_power": 0.4,
-    "temperature": 1.0,
-    "validation_metrics": {
-      "accuracy": 0.45136459062281314,
-      "balanced_accuracy": 0.3022215446994847,
-      "f1_macro": 0.2990624038207118,
-      "precision_macro": 0.29858215162086177,
-      "recall_macro": 0.3022215446994847,
-      "precision_per_class": [
-        0.08695652173913043,
-        0.14,
-        0.5865257595772787,
-        0.38084632516703787
-      ],
-      "recall_per_class": [
-        0.08695652173913043,
-        0.1958041958041958,
-        0.5461254612546126,
-        0.38
-      ],
-      "f1_per_class": [
-        0.08695652173913043,
-        0.16326530612244897,
-        0.5656050955414013,
-        0.3804226918798665
-      ],
-      "support_per_class": [
-        23,
-        143,
-        813,
-        450
-      ],
-      "confusion_matrix": [
-        [
-          2,
-          12,
-          6,
-          3
-        ],
-        [
-          4,
-          28,
-          88,
-          23
-        ],
-        [
-          7,
-          110,
-          444,
-          252
-        ],
-        [
-          10,
-          50,
-          219,
-          171
-        ]
-      ],
-      "cross_entropy": 1.0807858817196714
-    }
+    "temperature": 1.0
   },
   "test_row_metrics": {
     "accuracy": 0.6428889135994662,
@@ -235,66 +177,8 @@
       },
       "selected_rounds": 315,
       "selected_bias_power": 0.4,
-      "selected_temperature": 1.0,
-      "validation_metrics": {
-        "accuracy": 0.45136459062281314,
-        "balanced_accuracy": 0.3022215446994847,
-        "f1_macro": 0.2990624038207118,
-        "precision_macro": 0.29858215162086177,
-        "recall_macro": 0.3022215446994847,
-        "precision_per_class": [
-          0.08695652173913043,
-          0.14,
-          0.5865257595772787,
-          0.38084632516703787
-        ],
-        "recall_per_class": [
-          0.08695652173913043,
-          0.1958041958041958,
-          0.5461254612546126,
-          0.38
-        ],
-        "f1_per_class": [
-          0.08695652173913043,
-          0.16326530612244897,
-          0.5656050955414013,
-          0.3804226918798665
-        ],
-        "support_per_class": [
-          23,
-          143,
-          813,
-          450
-        ],
-        "confusion_matrix": [
-          [
-            2,
-            12,
-            6,
-            3
-          ],
-          [
-            4,
-            28,
-            88,
-            23
-          ],
-          [
-            7,
-            110,
-            444,
-            252
-          ],
-          [
-            10,
-            50,
-            219,
-            171
-          ]
-        ],
-        "cross_entropy": 1.0807858817196714
-      }
+      "selected_temperature": 1.0
     }
   ],
-  "note": "Validation selection prioritized balanced accuracy subject to minimum accuracy guardrail, with class-bias and temperature calibration swept on validation only."
+  "note": "Holdout selection prioritized balanced accuracy subject to minimum accuracy guardrail, with class-bias and temperature calibration swept on holdout only."
 }

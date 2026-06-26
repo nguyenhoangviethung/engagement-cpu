@@ -190,4 +190,4 @@ Neu can so sanh raw-video end-to-end, phai do them pipeline video -> face landma
 - Bao cao chinh 4-class: `checkpoints/reports/bao_cao_ket_qua_huan_luyen_models.md`
 - Product fixed report: `checkpoints/runs/product_4class_fixed_triple_xgb/summary.json`
 - Product reproduce config: `checkpoints/runs/product_4class_fixed_triple_xgb/reproduction_config.json`
-- Validation-selected fusion: `checkpoints/runs/fusion_sweep_xgb_4class/summary.json`
+- Fusion sweep report: `checkpoints/runs/fusion_sweep_xgb_4class/summary.json`

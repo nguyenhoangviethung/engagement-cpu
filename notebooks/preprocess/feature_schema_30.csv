@@ -1,0 +1,31 @@
+﻿Chỉ số,Feature,Nguồn landmark,Ý nghĩa
+0,left_ear,"[33, 160, 158, 133, 153, 144]",Độ mở mắt trái
+1,right_ear,"[362, 385, 387, 263, 373, 380]",Độ mở mắt phải
+2,mouth_aspect_ratio,"[13, 14, 61, 291]",Độ mở miệng
+3,pitch_proxy,"[1, 152, 33, 263, 61, 291]",Cúi/ngẩng tương đối
+4,yaw_proxy,"[1, 33, 263]",Quay trái/phải tương đối
+5,roll_proxy,"[33, 263]",Nghiêng đầu
+6,lm_33_x,33 - Góc ngoài mắt trái,Tọa độ x chuẩn hóa
+7,lm_33_y,33 - Góc ngoài mắt trái,Tọa độ y chuẩn hóa
+8,lm_33_z,33 - Góc ngoài mắt trái,Tọa độ z chuẩn hóa
+9,lm_133_x,133 - Góc trong mắt trái,Tọa độ x chuẩn hóa
+10,lm_133_y,133 - Góc trong mắt trái,Tọa độ y chuẩn hóa
+11,lm_133_z,133 - Góc trong mắt trái,Tọa độ z chuẩn hóa
+12,lm_362_x,362 - Góc trong mắt phải,Tọa độ x chuẩn hóa
+13,lm_362_y,362 - Góc trong mắt phải,Tọa độ y chuẩn hóa
+14,lm_362_z,362 - Góc trong mắt phải,Tọa độ z chuẩn hóa
+15,lm_263_x,263 - Góc ngoài mắt phải,Tọa độ x chuẩn hóa
+16,lm_263_y,263 - Góc ngoài mắt phải,Tọa độ y chuẩn hóa
+17,lm_263_z,263 - Góc ngoài mắt phải,Tọa độ z chuẩn hóa
+18,lm_61_x,61 - Khóe miệng trái,Tọa độ x chuẩn hóa
+19,lm_61_y,61 - Khóe miệng trái,Tọa độ y chuẩn hóa
+20,lm_61_z,61 - Khóe miệng trái,Tọa độ z chuẩn hóa
+21,lm_291_x,291 - Khóe miệng phải,Tọa độ x chuẩn hóa
+22,lm_291_y,291 - Khóe miệng phải,Tọa độ y chuẩn hóa
+23,lm_291_z,291 - Khóe miệng phải,Tọa độ z chuẩn hóa
+24,lm_13_x,13 - Môi trên,Tọa độ x chuẩn hóa
+25,lm_13_y,13 - Môi trên,Tọa độ y chuẩn hóa
+26,lm_13_z,13 - Môi trên,Tọa độ z chuẩn hóa
+27,lm_14_x,14 - Môi dưới,Tọa độ x chuẩn hóa
+28,lm_14_y,14 - Môi dưới,Tọa độ y chuẩn hóa
+29,lm_14_z,14 - Môi dưới,Tọa độ z chuẩn hóa

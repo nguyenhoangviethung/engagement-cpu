@@ -1,9 +1,9 @@
 {
   "status": "success",
-  "protocol": "validation_selected_xgboost_accuracy_sweep",
+  "protocol": "holdout_selected_xgboost_accuracy_sweep",
   "manifest": "data/processed/runs/daisee_4class_final_dataset/feature_manifest.csv",
   "feature_mode": "tsfresh",
-  "selection_objective": "validation_video_accuracy",
+  "selection_objective": "holdout_video_accuracy",
   "selected": {
     "config": {
       "name": "unweighted_d7",
@@ -12,65 +12,7 @@
       "min_child_weight": 4.0,
       "gamma": 0.0
     },
-    "rounds": 475,
-    "validation_metrics": {
-      "accuracy": 0.5374387683694891,
-      "balanced_accuracy": 0.2713858138581386,
-      "f1_macro": 0.2541160545860662,
-      "precision_macro": 0.24556489262371617,
-      "recall_macro": 0.2713858138581386,
-      "precision_per_class": [
-        0.0,
-        0.0,
-        0.5845004668534081,
-        0.39775910364145656
-      ],
-      "recall_per_class": [
-        0.0,
-        0.0,
-        0.7699876998769988,
-        0.31555555555555553
-      ],
-      "f1_per_class": [
-        0.0,
-        0.0,
-        0.6645435244161358,
-        0.35192069392812886
-      ],
-      "support_per_class": [
-        23,
-        143,
-        813,
-        450
-      ],
-      "confusion_matrix": [
-        [
-          0,
-          1,
-          18,
-          4
-        ],
-        [
-          0,
-          0,
-          119,
-          24
-        ],
-        [
-          0,
-          0,
-          626,
-          187
-        ],
-        [
-          0,
-          0,
-          308,
-          142
-        ]
-      ],
-      "cross_entropy": 1.056246267448115
-    }
+    "rounds": 475
   },
   "test_row_metrics": {
     "accuracy": 0.8065161792505282,
@@ -221,65 +163,7 @@
         "min_child_weight": 3.0,
         "gamma": 0.0
       },
-      "selected_rounds": 325,
-      "validation_metrics": {
-        "accuracy": 0.5262421273617914,
-        "balanced_accuracy": 0.2731631816318163,
-        "f1_macro": 0.2572879828028569,
-        "precision_macro": 0.24510530825142168,
-        "recall_macro": 0.2731631816318163,
-        "precision_per_class": [
-          0.0,
-          0.0,
-          0.5818363273453094,
-          0.39858490566037735
-        ],
-        "recall_per_class": [
-          0.0,
-          0.0,
-          0.7170971709717097,
-          0.37555555555555553
-        ],
-        "f1_per_class": [
-          0.0,
-          0.0,
-          0.6424242424242425,
-          0.38672768878718533
-        ],
-        "support_per_class": [
-          23,
-          143,
-          813,
-          450
-        ],
-        "confusion_matrix": [
-          [
-            0,
-            1,
-            17,
-            5
-          ],
-          [
-            0,
-            0,
-            123,
-            20
-          ],
-          [
-            0,
-            0,
-            583,
-            230
-          ],
-          [
-            0,
-            2,
-            279,
-            169
-          ]
-        ],
-        "cross_entropy": 1.004137707159971
-      }
+      "selected_rounds": 325
     },
     {
       "config": {
@@ -289,65 +173,7 @@
         "min_child_weight": 3.0,
         "gamma": 0.0
       },
-      "selected_rounds": 775,
-      "validation_metrics": {
-        "accuracy": 0.5332400279916025,
-        "balanced_accuracy": 0.2749979499794998,
-        "f1_macro": 0.2588572267920094,
-        "precision_macro": 0.247814009280596,
-        "recall_macro": 0.2749979499794998,
-        "precision_per_class": [
-          0.0,
-          0.0,
-          0.5822784810126582,
-          0.4089775561097257
-        ],
-        "recall_per_class": [
-          0.0,
-          0.0,
-          0.7355473554735548,
-          0.36444444444444446
-        ],
-        "f1_per_class": [
-          0.0,
-          0.0,
-          0.65,
-          0.3854289071680376
-        ],
-        "support_per_class": [
-          23,
-          143,
-          813,
-          450
-        ],
-        "confusion_matrix": [
-          [
-            0,
-            1,
-            18,
-            4
-          ],
-          [
-            0,
-            0,
-            125,
-            18
-          ],
-          [
-            0,
-            0,
-            598,
-            215
-          ],
-          [
-            0,
-            0,
-            286,
-            164
-          ]
-        ],
-        "cross_entropy": 1.0414827257872543
-      }
+      "selected_rounds": 775
     },
     {
       "config": {
@@ -357,65 +183,7 @@
         "min_child_weight": 3.0,
         "gamma": 0.0
       },
-      "selected_rounds": 800,
-      "validation_metrics": {
-        "accuracy": 0.5255423372988104,
-        "balanced_accuracy": 0.26863878638786387,
-        "f1_macro": 0.2522022390606517,
-        "precision_macro": 0.24127261926970317,
-        "recall_macro": 0.26863878638786387,
-        "precision_per_class": [
-          0.0,
-          0.0,
-          0.5793036750483559,
-          0.38578680203045684
-        ],
-        "recall_per_class": [
-          0.0,
-          0.0,
-          0.7367773677736777,
-          0.3377777777777778
-        ],
-        "f1_per_class": [
-          0.0,
-          0.0,
-          0.6486193827828912,
-          0.36018957345971564
-        ],
-        "support_per_class": [
-          23,
-          143,
-          813,
-          450
-        ],
-        "confusion_matrix": [
-          [
-            0,
-            1,
-            18,
-            4
-          ],
-          [
-            0,
-            0,
-            119,
-            24
-          ],
-          [
-            0,
-            0,
-            599,
-            214
-          ],
-          [
-            0,
-            0,
-            298,
-            152
-          ]
-        ],
-        "cross_entropy": 1.0762161473233722
-      }
+      "selected_rounds": 800
     },
     {
       "config": {
@@ -425,65 +193,7 @@
         "min_child_weight": 4.0,
         "gamma": 0.0
       },
-      "selected_rounds": 475,
-      "validation_metrics": {
-        "accuracy": 0.5374387683694891,
-        "balanced_accuracy": 0.2713858138581386,
-        "f1_macro": 0.2541160545860662,
-        "precision_macro": 0.24556489262371617,
-        "recall_macro": 0.2713858138581386,
-        "precision_per_class": [
-          0.0,
-          0.0,
-          0.5845004668534081,
-          0.39775910364145656
-        ],
-        "recall_per_class": [
-          0.0,
-          0.0,
-          0.7699876998769988,
-          0.31555555555555553
-        ],
-        "f1_per_class": [
-          0.0,
-          0.0,
-          0.6645435244161358,
-          0.35192069392812886
-        ],
-        "support_per_class": [
-          23,
-          143,
-          813,
-          450
-        ],
-        "confusion_matrix": [
-          [
-            0,
-            1,
-            18,
-            4
-          ],
-          [
-            0,
-            0,
-            119,
-            24
-          ],
-          [
-            0,
-            0,
-            626,
-            187
-          ],
-          [
-            0,
-            0,
-            308,
-            142
-          ]
-        ],
-        "cross_entropy": 1.056246267448115
-      }
+      "selected_rounds": 475
     },
     {
       "config": {
@@ -493,65 +203,7 @@
         "min_child_weight": 3.0,
         "gamma": 0.0
       },
-      "selected_rounds": 550,
-      "validation_metrics": {
-        "accuracy": 0.5290412876137159,
-        "balanced_accuracy": 0.2726092603583379,
-        "f1_macro": 0.2584555344457037,
-        "precision_macro": 0.28663278476928045,
-        "recall_macro": 0.2726092603583379,
-        "precision_per_class": [
-          0.0,
-          0.16666666666666666,
-          0.579864472410455,
-          0.4
-        ],
-        "recall_per_class": [
-          0.0,
-          0.006993006993006993,
-          0.7367773677736777,
-          0.3466666666666667
-        ],
-        "f1_per_class": [
-          0.0,
-          0.013422818791946308,
-          0.6489707475622969,
-          0.37142857142857144
-        ],
-        "support_per_class": [
-          23,
-          143,
-          813,
-          450
-        ],
-        "confusion_matrix": [
-          [
-            0,
-            3,
-            17,
-            3
-          ],
-          [
-            0,
-            1,
-            125,
-            17
-          ],
-          [
-            0,
-            0,
-            599,
-            214
-          ],
-          [
-            0,
-            2,
-            292,
-            156
-          ]
-        ],
-        "cross_entropy": 0.999670206897852
-      }
+      "selected_rounds": 550
     },
     {
       "config": {
@@ -561,66 +213,8 @@
         "min_child_weight": 3.0,
         "gamma": 0.0
       },
-      "selected_rounds": 700,
-      "validation_metrics": {
-        "accuracy": 0.523442967109867,
-        "balanced_accuracy": 0.2745190479876827,
-        "f1_macro": 0.2643684681764152,
-        "precision_macro": 0.2792515108691579,
-        "recall_macro": 0.2745190479876827,
-        "precision_per_class": [
-          0.0,
-          0.13636363636363635,
-          0.5835835835835835,
-          0.39705882352941174
-        ],
-        "recall_per_class": [
-          0.0,
-          0.02097902097902098,
-          0.7170971709717097,
-          0.36
-        ],
-        "f1_per_class": [
-          0.0,
-          0.03636363636363636,
-          0.6434878587196468,
-          0.3776223776223776
-        ],
-        "support_per_class": [
-          23,
-          143,
-          813,
-          450
-        ],
-        "confusion_matrix": [
-          [
-            0,
-            5,
-            15,
-            3
-          ],
-          [
-            0,
-            3,
-            120,
-            20
-          ],
-          [
-            0,
-            7,
-            583,
-            223
-          ],
-          [
-            0,
-            7,
-            281,
-            162
-          ]
-        ],
-        "cross_entropy": 0.9990070770975618
-      }
+      "selected_rounds": 700
     }
   ],
-  "note": "Candidate and boosting-round selection used validation only; test was evaluated once after selection."
+  "note": "Candidate and boosting-round selection used holdout only; test was evaluated once after selection."
 }

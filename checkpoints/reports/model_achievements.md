@@ -1,14 +1,14 @@
 # Model Achievements Summary 4-class
 
-> File kiem tra nhanh cac model 4-class con duoc giu sau cleanup. Bao cao chinh la `bao_cao_ket_qua_huan_luyen_models.md`.
+> File kiểm tra nhanh các model 4-class còn được giữ sau cleanup. Báo cáo chính là `bao_cao_ket_qua_huan_luyen_models.md`.
 
 ## Topline
 
-| Muc | Model | Accuracy | Balanced Acc | F1 Macro | Model-side latency | Ghi chu |
+| Mục | Model | Accuracy | Balanced Acc | F1 Macro | Model-side latency | Ghi chú |
 | :--- | :--- | ---: | ---: | ---: | ---: | :--- |
-| Product | `fixed_triple_xgb_fusion` | **76.01%** | **79.98%** | **77.34%** | 11.42 ms | Model product, reproduce bang `scripts/reproduce_product_4class.sh`. |
-| Best balanced | `inception_lite_ensemble_balanced` | 71.30% | **80.47%** | 72.45% | 4.20 ms | Balanced cao nhat trong cac model duoc giu. |
-| Fastest baseline | `novel_minirocket_4class` | 53.48% | 28.00% | 27.28% | **0.11 ms** | Rat nhe, chi lam baseline latency. |
+| Product | `fixed_triple_xgb_fusion` | **76.01%** | **79.98%** | **77.34%** | 11.42 ms | Model product, reproduce bằng `scripts/reproduce_product_4class.sh`. |
+| Best balanced | `inception_lite_ensemble_balanced` | 71.30% | **80.47%** | 72.45% | 4.20 ms | Balanced cao nhất trong các model được giữ. |
+| Fastest baseline | `novel_minirocket_4class` | 53.48% | 28.00% | 27.28% | **0.11 ms** | Rất nhẹ, chủ yếu làm baseline latency. |
 
 ## Models Kept In Report
 

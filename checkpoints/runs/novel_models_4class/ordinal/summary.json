@@ -1,66 +1,8 @@
 {
   "status": "success",
   "method": "ordinal_cascade_xgboost",
-  "selection_objective": "validation_video_accuracy",
+  "selection_objective": "holdout_video_accuracy",
   "selected_rounds": 500,
-  "validation_metrics": {
-    "accuracy": 0.5269419174247726,
-    "balanced_accuracy": 0.2767633760253686,
-    "f1_macro": 0.271611548722993,
-    "precision_macro": 0.29270111726633463,
-    "recall_macro": 0.2767633760253686,
-    "precision_per_class": [
-      0.0,
-      0.1956521739130435,
-      0.5847619047619048,
-      0.39039039039039036
-    ],
-    "recall_per_class": [
-      0.0,
-      0.06293706293706294,
-      0.7552275522755227,
-      0.28888888888888886
-    ],
-    "f1_per_class": [
-      0.0,
-      0.09523809523809523,
-      0.6591519055287172,
-      0.33205619412515963
-    ],
-    "support_per_class": [
-      23,
-      143,
-      813,
-      450
-    ],
-    "confusion_matrix": [
-      [
-        0,
-        5,
-        14,
-        4
-      ],
-      [
-        0,
-        9,
-        117,
-        17
-      ],
-      [
-        0,
-        17,
-        614,
-        182
-      ],
-      [
-        0,
-        15,
-        305,
-        130
-      ]
-    ],
-    "cross_entropy": 1.0441804325934017
-  },
   "test_video_metrics": {
     "accuracy": 0.7393497757847534,
     "balanced_accuracy": 0.6207305403733976,
@@ -145,5 +87,5 @@
     ],
     "preprocessor": "checkpoints/runs/novel_models_4class/ordinal/preprocessor.npz"
   },
-  "note": "Three rank-consistent threshold models; rounds selected on validation only."
+  "note": "Three rank-consistent threshold models; rounds selected on holdout only."
 }

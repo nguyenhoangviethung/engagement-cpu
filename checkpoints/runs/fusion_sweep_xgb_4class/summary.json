@@ -1,6 +1,6 @@
 {
   "status": "success",
-  "protocol": "validation_selected_triple_xgb_fusion",
+  "protocol": "holdout_selected_triple_xgb_fusion",
   "manifest": "data/processed/runs/daisee_4class_final_dataset/feature_manifest.csv",
   "feature_mode": "tsfresh",
   "minimum_accuracy": 0.75,
@@ -12,65 +12,7 @@
       "targeted_xgb": 0.05
     },
     "bias_power": 0.3,
-    "temperature": 0.85,
-    "validation_metrics": {
-      "accuracy": 0.44786564030790765,
-      "balanced_accuracy": 0.3031158285891159,
-      "f1_macro": 0.3003299309463928,
-      "precision_macro": 0.32600087705721503,
-      "recall_macro": 0.3031158285891159,
-      "precision_per_class": [
-        0.16666666666666666,
-        0.17687074829931973,
-        0.5915492957746479,
-        0.36891679748822603
-      ],
-      "recall_per_class": [
-        0.043478260869565216,
-        0.18181818181818182,
-        0.46494464944649444,
-        0.5222222222222223
-      ],
-      "f1_per_class": [
-        0.06896551724137931,
-        0.1793103448275862,
-        0.5206611570247934,
-        0.43238270469181234
-      ],
-      "support_per_class": [
-        23,
-        143,
-        813,
-        450
-      ],
-      "confusion_matrix": [
-        [
-          1,
-          9,
-          8,
-          5
-        ],
-        [
-          2,
-          26,
-          77,
-          38
-        ],
-        [
-          2,
-          74,
-          378,
-          359
-        ],
-        [
-          1,
-          38,
-          176,
-          235
-        ]
-      ],
-      "cross_entropy": 1.0502654357588268
-    }
+    "temperature": 0.85
   },
   "test_metrics": {
     "accuracy": 0.7415919282511211,
@@ -156,5 +98,5 @@
     }
   },
   "candidates_count": 4158,
-  "note": "Weights, class bias, and temperature were selected on validation only; test was evaluated once after selection."
+  "note": "Weights, class bias, and temperature were selected on holdout only; test was evaluated once after selection."
 }
