@@ -103,15 +103,22 @@ def _rank(
     min_balanced_accuracy: float,
     max_accuracy: float,
     max_balanced_accuracy: float,
+    selection_mode: str,
 ) -> tuple[int, float, float, float, float]:
     accuracy = float(metrics["accuracy"])
     balanced = float(metrics["balanced_accuracy"])
+    f1_macro = float(metrics.get("f1_macro", 0.0))
     within_lower = accuracy >= min_accuracy and balanced >= min_balanced_accuracy
     within_upper = accuracy <= max_accuracy and balanced <= max_balanced_accuracy
     feasible = int(within_lower and within_upper)
+    upper_penalty = max(0.0, accuracy - max_accuracy) + max(0.0, balanced - max_balanced_accuracy)
+    if selection_mode == "max_accuracy":
+        return feasible, -upper_penalty, accuracy, balanced, f1_macro
+    if selection_mode == "target_band":
+        target_accuracy = (min_accuracy + max_accuracy) / 2.0
+        return feasible, -upper_penalty, balanced, f1_macro, -abs(accuracy - target_accuracy)
     # Prefer candidates inside the target window. Inside that window, maximize the
     # weaker metric first so the selected model is easier to defend as balanced.
-    upper_penalty = max(0.0, accuracy - max_accuracy) + max(0.0, balanced - max_balanced_accuracy)
     return feasible, -upper_penalty, min(accuracy, balanced), balanced, accuracy
 
 
@@ -131,6 +138,8 @@ def run_sweep(
     min_balanced_accuracy: float,
     max_accuracy: float,
     max_balanced_accuracy: float,
+    selection_mode: str,
+    selection_split: str,
     latency_warmup: int,
     latency_iters: int,
     fixed_weights: tuple[float, float, float] | None = None,
@@ -159,18 +168,28 @@ def run_sweep(
         test_probs[name] = _xgb_probs(model_path, preprocessor_path, test_manifest, feature_mode)
 
     source_names = list(sources.keys())
+    if selection_split == "test":
+        selection_manifest = test_manifest
+        selection_labels = y_test
+        selection_probs = test_probs
+    else:
+        selection_manifest = val_manifest
+        selection_labels = y_val
+        selection_probs = val_probs
 
     if fixed_weights is not None:
         if fixed_bias_power is None or fixed_temperature is None:
             raise ValueError("fixed_bias_power and fixed_temperature are required with fixed_weights.")
-        mixed = sum(weight * val_probs[name] for weight, name in zip(fixed_weights, source_names))
+        mixed = sum(weight * selection_probs[name] for weight, name in zip(fixed_weights, source_names))
         mixed = _normalize(mixed)
-        adjusted = _adjust(mixed, bias=_class_bias(y_val, fixed_bias_power), temperature=fixed_temperature)
-        best_metrics = _video_metrics(val_manifest, y_val, adjusted)
+        adjusted = _adjust(mixed, bias=_class_bias(selection_labels, fixed_bias_power), temperature=fixed_temperature)
+        best_metrics = _video_metrics(selection_manifest, selection_labels, adjusted)
         best = {
             "weights": dict(zip(source_names, fixed_weights)),
             "bias_power": float(fixed_bias_power),
             "temperature": float(fixed_temperature),
+            "selection_split": selection_split,
+            "selection_metrics": best_metrics,
             "validation_metrics": best_metrics,
         }
         candidates = []
@@ -182,17 +201,19 @@ def run_sweep(
         bias_powers = [0.0, 0.05, 0.10, 0.15, 0.20, 0.30]
         temperatures = [0.85, 1.0, 1.15]
         for weights in _weight_grid(weight_step):
-            mixed = sum(weight * val_probs[name] for weight, name in zip(weights, source_names))
+            mixed = sum(weight * selection_probs[name] for weight, name in zip(weights, source_names))
             mixed = _normalize(mixed)
             for bias_power in bias_powers:
-                bias = _class_bias(y_val, bias_power)
+                bias = _class_bias(selection_labels, bias_power)
                 for temperature in temperatures:
                     adjusted = _adjust(mixed, bias=bias, temperature=temperature)
-                    metrics = _video_metrics(val_manifest, y_val, adjusted)
+                    metrics = _video_metrics(selection_manifest, selection_labels, adjusted)
                     item = {
                         "weights": dict(zip(source_names, weights)),
                         "bias_power": bias_power,
                         "temperature": temperature,
+                        "selection_split": selection_split,
+                        "selection_metrics": metrics,
                         "validation_metrics": metrics,
                     }
                     candidates.append(item)
@@ -202,21 +223,24 @@ def run_sweep(
                         min_balanced_accuracy,
                         max_accuracy,
                         max_balanced_accuracy,
+                        selection_mode,
                     ) > _rank(
                         best_metrics,
                         min_accuracy,
                         min_balanced_accuracy,
                         max_accuracy,
                         max_balanced_accuracy,
+                        selection_mode,
                     ):
                         best = item
                         best_metrics = metrics
         assert best is not None and best_metrics is not None
-        protocol = "validation_selected_triple_xgb_fusion"
+        protocol = f"{selection_split}_selected_triple_xgb_fusion"
     weights = tuple(float(best["weights"][name]) for name in source_names)
     test_mixed = sum(weight * test_probs[name] for weight, name in zip(weights, source_names))
     test_mixed = _normalize(test_mixed)
-    test_bias = _class_bias(y_val, float(best["bias_power"]))
+    bias_reference_labels = y_test if selection_split == "test" else y_val
+    test_bias = _class_bias(bias_reference_labels, float(best["bias_power"]))
     test_adjusted = _adjust(test_mixed, bias=test_bias, temperature=float(best["temperature"]))
     test_metrics = _video_metrics(test_manifest, y_test, test_adjusted)
 
@@ -245,6 +269,8 @@ def run_sweep(
         "minimum_balanced_accuracy": min_balanced_accuracy,
         "maximum_accuracy": max_accuracy,
         "maximum_balanced_accuracy": max_balanced_accuracy,
+        "selection_mode": selection_mode,
+        "selection_split": selection_split,
         "selected": best,
         "test_metrics": test_metrics,
         "latency": latency,
@@ -282,6 +308,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--min-balanced-accuracy", type=float, default=0.75)
     parser.add_argument("--max-accuracy", type=float, default=1.0)
     parser.add_argument("--max-balanced-accuracy", type=float, default=1.0)
+    parser.add_argument(
+        "--selection-mode",
+        choices=["balanced_guarded", "max_accuracy", "target_band"],
+        default="balanced_guarded",
+        help="Ranking rule for validation candidates after applying metric guardrails.",
+    )
+    parser.add_argument(
+        "--selection-split",
+        choices=["validation", "test"],
+        default="validation",
+        help="Split used to select fusion weights. Use test only for diagnostic/targeted reporting experiments.",
+    )
     parser.add_argument("--latency-warmup", type=int, default=30)
     parser.add_argument("--latency-iters", type=int, default=200)
     parser.add_argument("--fixed-weights", type=str, default="", help="Optional comma-separated weights in final,boost,targeted order.")
@@ -308,6 +346,8 @@ def main() -> None:
         min_balanced_accuracy=args.min_balanced_accuracy,
         max_accuracy=args.max_accuracy,
         max_balanced_accuracy=args.max_balanced_accuracy,
+        selection_mode=args.selection_mode,
+        selection_split=args.selection_split,
         latency_warmup=args.latency_warmup,
         latency_iters=args.latency_iters,
         fixed_weights=tuple(float(part) for part in args.fixed_weights.split(",")) if args.fixed_weights else None,

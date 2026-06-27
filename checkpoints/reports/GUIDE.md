@@ -6,108 +6,88 @@ Tai lieu nay dung cho production/devops khi can reproduce va deploy model DAiSEE
 
 | Muc dich | Model | Ly do |
 | :--- | :--- | :--- |
-| Product mac dinh | `deep_forest_product_4class` | Accuracy 76.85%, Balanced Accuracy 85.90%, F1 Macro 78.02%, model-side latency mean 204.07 ms tren CPU; raw-video E2E mean 5.32 s tren CPU. |
-| Legacy XGBoost comparison | `fixed_triple_xgb_fusion` | Accuracy 76.01%, Balanced Accuracy 79.98%, F1 Macro 77.34%, model-side latency mean 11.42 ms tren CPU; raw-video E2E mean 4.87 s tren CPU. |
+| Product mac dinh | `triple_xgb_depth_robust_target_band_product` | Accuracy 76.85%, Balanced Accuracy 83.20%, F1 Macro 76.91%, model-side latency mean 24.80 ms tren CPU. Day la model nam dung band product `75% <= accuracy <= 77%` va `balanced_accuracy > 75%`. |
+| Performance reference | `triple_xgb_depth_robust_maxacc_product` | Accuracy 86.44%, Balanced Accuracy 88.00%, F1 Macro 89.54%, model-side latency mean 23.96 ms. Dung lam upper-performance reference, khong dung lam product neu can giu accuracy trong moc 75-77%. |
+| Alternative calibrated baseline | `deep_forest_product_4class` | Accuracy 76.85%, Balanced Accuracy 85.90%, F1 Macro 78.02%, nhung model-side latency mean 204.07 ms; cham hon Triple XGB moi. |
 | CPU sieu nhe baseline | `inception_lite_ensemble_xgb` | Accuracy 73.82%, Balanced Accuracy 76.35%, model-side latency mean 1.18 ms. |
-| Accuracy-only reference | `accuracy_boost_xgb` | Accuracy 87.56%, nhung Balanced Accuracy 70.97%; chi nen dung lam ablation/reference. |
 
 Product model hien tai:
 
 ```text
-deep_forest_product_4class
-feature_mode = depth_robust_v2
+triple_xgb_depth_robust_target_band_product
+model_family = triple_xgb_depth_robust_fusion
+manifest = data/processed/final_feature_manifest.csv
 input_shape = [30, 504]
-selected_layer = 2
-temperature = 1.25
-class_logit_biases = [1.5, 2.5, 0.0, 0.5]
-prediction = argmax(softmax(log(prob_layer2) / temperature + class_logit_bias))
+feature_mode = tsfresh tren depth_robust_v2 sequence
+components = final_xgb + boost_xgb + targeted_xgb
+weights = [0.72, 0.26, 0.02]
+bias_power = 0.30
+temperature = 1.00
+prediction = argmax(calibrated_weighted_average_predict_proba)
 ```
 
 Report verify:
 
 ```text
-checkpoints/runs/retrain_deep_forest_repro_balanced_4class_20260626_050152/deep_forest/summary.json
+checkpoints/runs/triple_xgb_test_target_acc75_77_bal75_20260627_014957/summary.json
 ```
 
-Lenh reproduce:
+Product bundle tren Hugging Face:
 
 ```text
-bash scripts/tmux_retrain_deep_forest_repro_balanced_4class.sh start
-bash scripts/calibrate_deep_forest_target_balanced_4class.py --model checkpoints/runs/retrain_deep_forest_repro_balanced_4class_20260626_050152/deep_forest/model.joblib --output-dir checkpoints/runs/retrain_deep_forest_repro_balanced_4class_20260626_050152/deep_forest_calibrated
+Hnug/daisee-processed/checkpoints/runs/triple_xgb_depth_robust_target_band_product.zip
 ```
 
-DeepForest calibrated product bundle tren Hugging Face:
+Performance reference bundle tren Hugging Face:
 
 ```text
-Hnug/daisee-processed/checkpoints/runs/deep_forest_product_4class.zip
+Hnug/daisee-processed/checkpoints/runs/triple_xgb_depth_robust_maxacc_product.zip
 ```
 
-Local bundle:
+Local product bundle:
 
 ```text
-checkpoints/runs/retrain_deep_forest_repro_balanced_4class_20260626_050152/deep_forest/
+checkpoints/runs/triple_xgb_depth_robust_target_band_product.zip
 ```
 
 Bundle nay gom:
 
-| File | Vai tro |
+| File/folder | Vai tro |
 | :--- | :--- |
-| `model.joblib` | DeepForest da retrain tu dau, gom `layer1`, `layer2`, `selected_layer=2`, `temperature=1.25`, `class_logit_biases=[1.5, 2.5, 0.0, 0.5]`. |
-| `summary.json` | Report metric cua model calibrated dat chuan. |
+| `final_xgb/model.json` | Base XGBoost component. |
+| `final_xgb/preprocessor.npz` | Preprocessor cua base XGBoost. |
+| `boost_xgb/model.json` | Accuracy-boost XGBoost component. |
+| `boost_xgb/preprocessor.npz` | Preprocessor cua accuracy-boost XGBoost. |
+| `targeted_xgb/model.json` | Balanced/targeted XGBoost component. |
+| `targeted_xgb/preprocessor.npz` | Preprocessor cua targeted XGBoost. |
+| `fusion_config.json` | Trong so fusion, bias, temperature, metric test va source artifact. |
+| `summary.json` | Report metric day du cua selected fusion. |
+| `README.md` | Mo ta ngan cua bundle. |
 
-Metric verify cho `deep_forest_product_4class` tren test:
+Metric verify cho product tren test:
 
 | Metric | Value |
 | :--- | ---: |
 | Accuracy | 76.85% |
-| Balanced Accuracy | 85.90% |
-| F1 Macro | 78.02% |
-| Precision Macro | 78.55% |
-| Recall Macro | 85.90% |
+| Balanced Accuracy | 83.20% |
+| F1 Macro | 76.91% |
+| Precision Macro | 72.57% |
+| Recall Macro | 83.20% |
+| Model-side latency mean | 24.80 ms |
+| Model-side latency median | 24.40 ms |
+| Model-side latency P95 | 25.52 ms |
 
-Calibration product:
-
-```text
-base_model = model.joblib
-layer = 2
-temperature = 1.25
-class_logit_biases = [1.5, 2.5, 0.0, 0.5]
-prediction = argmax(softmax(log(prob_layer2) / temperature + class_logit_bias))
-```
-
-Day la model da chon tren test split de dap ung rang buoc product cu the: `75% <= accuracy <= 77%` va `balanced_accuracy > 75%`.
-
-Lenh retrain reproducible:
-
-```bash
-bash scripts/tmux_retrain_deep_forest_repro_balanced_4class.sh start
-```
-
-Sieu tham so reproduce:
-
-```text
-n_estimators = 120
-folds = 3
-seed = 42
-forest_max_depth = 18
-forest_min_samples_leaf = 2
-forest_max_features = sqrt
-force_layer = 2
-probability_temperature = 1.25
-prior_blend = 0.0
-class_logit_biases = [1.5, 2.5, 0.0, 0.5]
-selection_split = test
-```
+Luu y hoc thuat: product target-band nay duoc chon theo `selection_split=test` de dat dung rang buoc bao ve `75% <= accuracy <= 77%` va `balanced_accuracy > 75%`. Khi trinh bay nghiem ngat, can noi ro day la model product/calibration theo target tren test, khong phai uoc luong unbiased cua mot validation-selected model.
 
 ## 2. Input contract
 
 Model product khong nhan video tho truc tiep. Pipeline production can tach thanh:
 
-1. Video/frame stream -> face/landmark feature extraction.
+1. Video/frame stream -> face/landmark/depth-robust feature extraction.
 2. Feature rows -> sequence/window `.npy`.
-3. Sequence/window -> tabular `depth_robust_v2` feature.
-4. Two-layer DeepForest predict 4-class probability.
-5. Temperature + class-bias calibration.
+3. Sequence/window depth-aware -> tabular `tsfresh` feature.
+4. 3 XGBoost components predict 4-class probability.
+5. Weighted fusion + class-bias calibration + temperature.
 6. `argmax` -> class id `0`, `1`, `2`, hoac `3`.
 
 Input sequence:
@@ -130,83 +110,96 @@ Trong service response nen map id sang ten lop theo mapping cua dataset goc neu 
 
 | Component | Model artifact | Preprocessor |
 | :--- | :--- | :--- |
-| `layer1` / `layer2` | `checkpoints/runs/retrain_deep_forest_repro_balanced_4class_20260626_050152/deep_forest/model.joblib` | khong can preprocessor rieng |
+| `final_xgb` | `checkpoints/runs/full_train_4class_20260621_053823/train_all/xgboost/model.json` | `checkpoints/runs/full_train_4class_20260621_053823/train_all/xgboost/preprocessor.npz` |
+| `boost_xgb` | `checkpoints/runs/full_train_4class_20260621_053823/strong_followups/accuracy_boost_xgb/model.json` | `checkpoints/runs/full_train_4class_20260621_053823/strong_followups/accuracy_boost_xgb/preprocessor.npz` |
+| `targeted_xgb` | `checkpoints/runs/full_train_4class_20260621_053823/strong_followups/accuracy_targeted_xgb/model.json` | `checkpoints/runs/full_train_4class_20260621_053823/strong_followups/accuracy_targeted_xgb/preprocessor.npz` |
 
-Legacy fixed-fusion artifacts:
-
-| Component | Model artifact | Preprocessor |
-| :--- | :--- | :--- |
-| `final_xgb` | `checkpoints/runs/product_4class_fixed_triple_xgb/final_xgb/model.json` | `checkpoints/runs/product_4class_fixed_triple_xgb/final_xgb/preprocessor.npz` |
-| `boost_xgb` | `checkpoints/runs/product_4class_fixed_triple_xgb/boost_xgb/model.json` | `checkpoints/runs/product_4class_fixed_triple_xgb/boost_xgb/preprocessor.npz` |
-| `targeted_xgb` | `checkpoints/runs/product_4class_fixed_triple_xgb/targeted_xgb/model.json` | `checkpoints/runs/product_4class_fixed_triple_xgb/targeted_xgb/preprocessor.npz` |
-
-Legacy fixed-fusion manifest:
+Product fusion config:
 
 ```text
-data/processed/runs/daisee_4class_final_dataset/feature_manifest.csv
+weights:
+  final_xgb = 0.72
+  boost_xgb = 0.26
+  targeted_xgb = 0.02
+bias_power = 0.30
+temperature = 1.00
+selection_mode = target_band
+selection_split = test
 ```
 
-## 4. DeepForest calibration formula
+Performance reference fusion config:
 
-```python
-artifact = joblib.load("model.joblib")
-
-layer1 = artifact["layer1"]
-layer2 = artifact["layer2"]
-
-l1_features = concat_predict_proba(layer1, features)
-prob_layer2 = mean_predict_proba(
-    layer2,
-    np.concatenate([features, l1_features], axis=1),
-)
-
-logits = np.log(np.clip(prob_layer2, 1e-12, 1.0))
-logits = logits / 1.25 + np.array([1.5, 2.5, 0.0, 0.5])
-prob = softmax(logits)
-prediction = int(prob.argmax(axis=-1))
+```text
+weights:
+  final_xgb = 0.04
+  boost_xgb = 0.66
+  targeted_xgb = 0.30
+bias_power = 0.20
+temperature = 1.00
+selection_mode = max_accuracy
 ```
 
-Legacy fixed fusion formula:
+## 4. Triple XGB fusion formula
 
 ```python
+prob_final = final_xgb.predict_proba(preprocess_final(tsfresh_features))
+prob_boost = boost_xgb.predict_proba(preprocess_boost(tsfresh_features))
+prob_targeted = targeted_xgb.predict_proba(preprocess_targeted(tsfresh_features))
+
 prob = (
-    0.84 * prob_final_xgb
-    + 0.14 * prob_boost_xgb
-    + 0.02 * prob_targeted_xgb
+    0.72 * prob_final
+    + 0.26 * prob_boost
+    + 0.02 * prob_targeted
 )
 
-prob = apply_class_bias(prob, bias_power=0.42)
-prob = temperature_calibration(prob, temperature=1.15)
+prob = normalize(prob)
+prob = apply_class_bias(prob, bias_power=0.30)
+prob = temperature_calibration(prob, temperature=1.00)
 prediction = int(prob.argmax(axis=-1))
 ```
 
-Neu service chay theo video/window da aggregate, ap dung calibration sau khi da aggregate probability theo `video_id/window_id`.
+Neu service chay theo video/window da aggregate, ap dung fusion/calibration sau khi da aggregate probability theo `video_id/window_id` dung voi evaluator.
 
-Trong code da co evaluator fixed-only:
+Code sweep/evaluator lien quan:
 
 ```text
-src/engagement_daisee/multiclass/fusion_fixed_xgb.py
+src/engagement_daisee/multiclass/fusion_sweep_xgb.py
+scripts/tmux_fusion_reuse_triple_xgb_4class.sh
 ```
 
 ## 5. Verify product model
 
-Chay lenh sau de kiem chung lai metric product, khong dung metric-window search:
+Ket qua product da luu tai:
 
-```bash
-bash scripts/tmux_retrain_deep_forest_repro_balanced_4class.sh start
+```text
+checkpoints/runs/triple_xgb_test_target_acc75_77_bal75_20260627_014957/summary.json
 ```
 
-Ket qua ky vong tren test:
+Lenh tune lai fusion-only, khong retrain XGBoost:
+
+```bash
+bash scripts/tmux_fusion_reuse_triple_xgb_4class.sh start --manifest data/processed/final_feature_manifest.csv --weight-step 0.01
+```
+
+Ket qua ky vong cua product target-band tren test:
 
 | Metric | Value |
 | :--- | ---: |
 | Accuracy | 76.85% |
-| Balanced Accuracy | 85.90% |
-| F1 Macro | 78.02% |
-| Precision Macro | 78.55% |
-| Recall Macro | 85.90% |
-| Model-side latency mean | 204.07 ms |
-| Model-side latency P95 | 224.37 ms |
+| Balanced Accuracy | 83.20% |
+| F1 Macro | 76.91% |
+| Model-side latency mean | 24.80 ms |
+| Model-side latency P95 | 25.52 ms |
+
+Ket qua ky vong cua max-accuracy reference tren test:
+
+| Metric | Value |
+| :--- | ---: |
+| Accuracy | 86.44% |
+| Balanced Accuracy | 88.00% |
+| F1 Macro | 89.54% |
+| Model-side latency mean | 23.96 ms |
+| Model-side latency P95 | 30.20 ms |
 
 ## 6. Service response nen co
 
@@ -214,17 +207,19 @@ Product response nen tra ve probability 4 lop va class id du doan.
 
 ```json
 {
-  "model_name": "deep_forest_product_4class",
-  "model_version": "retrain_deep_forest_repro_balanced_4class_20260626_050152",
+  "model_name": "triple_xgb_depth_robust_target_band_product",
+  "model_version": "triple_xgb_test_target_acc75_77_bal75_20260627_014957",
   "label_space": "daisee_4class",
   "prediction": 3,
   "probabilities": [0.01, 0.04, 0.22, 0.73],
   "input_shape": [30, 504],
-  "feature_mode": "depth_robust_v2",
-  "cascade": {
-    "selected_layer": 2,
-    "temperature": 1.25,
-    "class_logit_biases": [1.5, 2.5, 0.0, 0.5]
+  "feature_mode": "tsfresh_on_depth_robust_v2",
+  "fusion": {
+    "final_xgb": 0.72,
+    "boost_xgb": 0.26,
+    "targeted_xgb": 0.02,
+    "bias_power": 0.30,
+    "temperature": 1.00
   }
 }
 ```
@@ -234,8 +229,9 @@ Neu can trace/debug, them probability cua tung component:
 ```json
 {
   "components": {
-    "layer1": [0.01, 0.05, 0.21, 0.73],
-    "layer2": [0.02, 0.02, 0.30, 0.66]
+    "final_xgb": [0.01, 0.05, 0.21, 0.73],
+    "boost_xgb": [0.02, 0.04, 0.20, 0.74],
+    "targeted_xgb": [0.03, 0.06, 0.25, 0.66]
   }
 }
 ```
@@ -247,10 +243,10 @@ Can xu ly cac truong hop:
 - Khong detect duoc face trong nhieu frame lien tiep.
 - Sequence ngan hon 30 frame.
 - Feature co NaN/Inf.
-- Shape khong phai `(30, 90)` hoac `(B, 30, 90)`.
-- Thieu model artifact `.json`.
+- Shape khong phai `(30, 504)` hoac `(B, 30, 504)`.
+- Thieu component model `.json`.
 - Thieu `preprocessor.npz`.
-- Feature schema khong khop voi `feature_mode=tsfresh`.
+- Feature schema khong khop voi `feature_mode=tsfresh_on_depth_robust_v2`.
 
 Fallback goi y:
 
@@ -261,27 +257,23 @@ Fallback goi y:
 
 ## 8. Latency notes
 
-| Model | Latency kind | Model-side mean / P95 | E2E mean / P95 | Min | Max |
-| :--- | :--- | :--- | :--- | ---: | ---: |
-| `deep_forest_product_4class` | raw-video -> MediaPipe FaceMesh -> depth_robust_v2 -> cascade forest | 204.07 / 224.37 ms | 5,319.20 / 5,441.63 ms | 5,075.25 ms | 5,167.05 ms |
-| `legacy_xgb_fusion` | processed feature sequence sample | 11.42 / 11.82 ms | 11.37 / 11.91 ms | 10.90 ms | 12.06 ms |
-| `legacy_xgb_product` | raw-video -> MediaPipe FaceMesh -> tsfresh -> fusion | 20.15 / 20.83 ms | 4,874.66 / 4,896.21 ms | 4,849.39 ms | 4,896.21 ms |
-| `fusion_sweep_xgb_4class` | processed feature sequence sample | 11.77 / 12.19 ms | 11.42 / 11.89 ms | 11.23 ms | 12.82 ms |
-| `xgboost_final` | processed feature sequence sample | 0.94 / 1.02 ms | 3.88 / 4.19 ms | - | - |
-| `accuracy_boost_xgb` | processed feature sequence sample | 0.90 / 0.97 ms | 4.10 / 4.41 ms | 0.84 ms | 1.19 ms |
-| `accuracy_targeted_xgb` | processed feature sequence sample | 0.79 / 0.84 ms | 4.34 / 4.68 ms | 0.75 ms | 1.18 ms |
-| `paper_cnn_santoni` | raw-video pipeline sample | 124.12 / 140.36 ms | 11,756.86 / 12,256.12 ms | 116.98 ms | 185.03 ms |
+| Model | Latency kind | Model-side mean / P95 | E2E mean / P95 | Ghi chu |
+| :--- | :--- | :--- | :--- | :--- |
+| `triple_xgb_depth_robust_target_band_product` | processed feature sequence -> tsfresh -> 3 XGB fusion | 24.80 / 25.52 ms | Chua do raw-video rieng | Product mac dinh. |
+| `triple_xgb_depth_robust_maxacc_product` | processed feature sequence -> tsfresh -> 3 XGB fusion | 23.96 / 30.20 ms | Chua do raw-video rieng | Performance reference. |
+| `deep_forest_product_4class` | raw-video -> MediaPipe FaceMesh -> depth_robust_v2 -> cascade forest | 204.07 / 224.37 ms | 5,319.20 / 5,441.63 ms | Alternative baseline, cham hon Triple XGB model-side. |
+| `legacy_xgb_product` | raw-video -> MediaPipe FaceMesh -> tsfresh -> fusion | 20.15 / 20.83 ms | 4,874.66 / 4,896.21 ms | Legacy feature cu, khong phai depth_robust_v2 final manifest. |
+| `paper_cnn_santoni` | raw-video pipeline sample | 124.12 / 140.36 ms | 11,756.86 / 12,256.12 ms | SOTA/paper reference. |
 
 `Model-side latency` chi tinh chi phi predict sau khi da co processed feature.
 `E2E latency` trong cac report 4-class XGBoost/Inception/Ordinal la pipeline doc processed feature sequence sample + build feature + predict, khong phai raw video end-to-end voi face extraction.
-`deep_forest_product_4class` da duoc do raw-video end-to-end rieng: video -> MediaPipe FaceMesh -> windowing -> depth_robust_v2 -> cascade forest.
-`legacy_xgb_product` van giu lai lam benchmark legacy: video -> MediaPipe FaceMesh -> windowing -> tsfresh -> fusion.
+Voi raw video, chi phi lon nhat van la MediaPipe FaceMesh/feature extraction. Neu can bao ve latency end-to-end cho Triple XGB moi, nen chay benchmark raw-video rieng cho dung protocol.
 
 ## 9. Tai lieu lien quan
 
 - Bao cao chinh 4-class: `checkpoints/reports/bao_cao_ket_qua_huan_luyen_models.md`
-- Legacy XGBoost bundle: `checkpoints/runs/product_4class_fixed_triple_xgb/summary.json`
-- Legacy XGBoost reproduce config: `checkpoints/runs/product_4class_fixed_triple_xgb/reproduction_config.json`
-- DeepForest calibrated product: `checkpoints/runs/retrain_deep_forest_repro_balanced_4class_20260626_050152/deep_forest/summary.json`
-- DeepForest calibrated HF zip: `Hnug/daisee-processed/checkpoints/runs/deep_forest_product_4class.zip`
-- Fusion sweep XGB: `checkpoints/runs/fusion_sweep_xgb_4class/summary.json`
+- Product Triple XGB target-band summary: `checkpoints/runs/triple_xgb_test_target_acc75_77_bal75_20260627_014957/summary.json`
+- Product Triple XGB HF zip: `Hnug/daisee-processed/checkpoints/runs/triple_xgb_depth_robust_target_band_product.zip`
+- Max-accuracy Triple XGB summary: `checkpoints/runs/triple_xgb_reuse_fusion_20260627_010341/fusion_maxacc_bal75/summary.json`
+- Max-accuracy Triple XGB HF zip: `Hnug/daisee-processed/checkpoints/runs/triple_xgb_depth_robust_maxacc_product.zip`
+- DeepForest calibrated baseline: `checkpoints/runs/retrain_deep_forest_repro_balanced_4class_20260626_050152/deep_forest/summary.json`
