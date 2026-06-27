@@ -16,6 +16,7 @@
 | Model de xuat cho product 4-class | **Triple XGBoost depth-robust target-band** |
 | Metric product model | **Accuracy 76.85%**, **Balanced Accuracy 83.20%**, **F1 Macro 76.91%** |
 | Product latency model-side | mean **24.80 ms**, median **24.40 ms**, P95 **25.52 ms** tren CPU |
+| Product raw-video E2E | mean **4,704.27 ms**, median **4,666.57 ms**, P95 **4,780.48 ms** tren CPU |
 | Ly do chon | Accuracy nam trong moc **75-77%** de bao ve, Balanced Accuracy >75%, va model-side nhanh hon ro so voi DeepForest cung nhu CNN SOTA reference da benchmark. |
 | Product summary | `checkpoints/runs/triple_xgb_test_target_acc75_77_bal75_20260627_014957/summary.json` |
 | Product HF artifact | `Hnug/daisee-processed/checkpoints/runs/triple_xgb_depth_robust_target_band_product.zip` |
@@ -64,8 +65,11 @@ Latency model-side duoc do tren CPU, input la processed feature sequence da co s
 | Latency kind | Mean | Median | P95 |
 | :--- | ---: | ---: | ---: |
 | Model-side Triple XGB target-band | **24.80 ms** | **24.40 ms** | **25.52 ms** |
+| Raw-video E2E Triple XGB target-band | **4,704.27 ms** | **4,666.57 ms** | **4,780.48 ms** |
 
-E2E raw-video rieng cho Triple XGB moi chua duoc do lai. Tuy nhien, model-side cua Triple XGB moi nho hon DeepForest rat nhieu, nen khi tinh tu video tho, chi phi chinh van se nam o MediaPipe FaceMesh/feature extraction.
+Raw-video E2E duoc do theo pipeline: raw video -> MediaPipe FaceMesh -> windowing -> `depth_robust_v2` -> `tsfresh` -> Triple XGB fusion. Video benchmark: `data/raw/daisee/DAiSEE/DataSet/Train/310069/3100692005/3100692005.avi`, 300 frames, 10 windows, warmup=1, iters=3, CPU threads=2.
+
+Trong E2E nay, feature extraction chiem phan lon chi phi: mean **4,665.83 ms**; model inference mean **38.44 ms**.
 
 ### 2.4. Max-accuracy Triple XGB reference
 
@@ -74,6 +78,8 @@ Model nay khong phai product mac dinh vi accuracy vuot xa band 75-77%, nhung no 
 | Model | Accuracy | Balanced Acc | F1 Macro | Model-side mean | Model-side P95 | Report |
 | :--- | ---: | ---: | ---: | ---: | ---: | :--- |
 | `triple_xgb_depth_robust_maxacc_product` | **86.44%** | **88.00%** | **89.54%** | 23.96 ms | 30.20 ms | `checkpoints/runs/triple_xgb_reuse_fusion_20260627_010341/fusion_maxacc_bal75/summary.json` |
+
+Raw-video E2E cua max-accuracy reference tren cung benchmark: mean **4,704.31 ms**, median **4,666.74 ms**, P95 **4,780.85 ms**.
 
 Fusion config cua max-accuracy reference:
 
@@ -92,8 +98,8 @@ Bang nay chi gom cac run 4-class. Tat ca model noi bo trong bang nay deu duoc tr
 
 | No. | Run | Model / Selection | Accuracy | Balanced Acc | F1 Macro | Model-side latency mean / P95 | E2E latency mean / P95 | Report |
 | ---: | :--- | :--- | ---: | ---: | ---: | :--- | :--- | :--- |
-| 1 | `triple_xgb_depth_robust_maxacc_product` | Triple XGB max-accuracy reference | **86.44%** | **88.00%** | **89.54%** | 23.96 / 30.20 ms | Chua do raw-video rieng | `triple_xgb_reuse_fusion_20260627_010341/fusion_maxacc_bal75/summary.json` |
-| 2 | `triple_xgb_depth_robust_target_band_product` | **Product: Triple XGB target-band** | **76.85%** | **83.20%** | **76.91%** | 24.80 / 25.52 ms | Chua do raw-video rieng | `triple_xgb_test_target_acc75_77_bal75_20260627_014957/summary.json` |
+| 1 | `triple_xgb_depth_robust_maxacc_product` | Triple XGB max-accuracy reference | **86.44%** | **88.00%** | **89.54%** | 23.96 / 30.20 ms | 4,704.31 / 4,780.85 ms | `triple_xgb_reuse_fusion_20260627_010341/fusion_maxacc_bal75/summary.json` |
+| 2 | `triple_xgb_depth_robust_target_band_product` | **Product: Triple XGB target-band** | **76.85%** | **83.20%** | **76.91%** | 24.80 / 25.52 ms | 4,704.27 / 4,780.48 ms | `triple_xgb_test_target_acc75_77_bal75_20260627_014957/summary.json` |
 | 3 | `deep_forest_product_4class` | DeepForest calibrated baseline | 76.85% | 85.90% | 78.02% | 204.07 / 224.37 ms | 5,319.20 / 5,441.63 ms | `retrain_deep_forest_repro_balanced_4class_20260626_050152/deep_forest/summary.json` |
 | 4 | `fusion_sweep_xgb_4class` | Fusion sweep XGB old selection | 74.16% | 77.59% | 76.30% | 11.77 / 12.19 ms | 11.42 / 11.89 ms | `fusion_sweep_xgb_4class.json` |
 | 5 | `daisee_4class_gpu_final` | XGBoost final | 73.82% | 76.35% | 77.27% | 0.94 / 1.02 ms | 3.88 / 4.19 ms | `daisee_4class_gpu_final.json` |
@@ -172,21 +178,21 @@ Bang nay chi dung cac moc 4-class. Nhieu paper DAiSEE khong cong bo Balanced Acc
 
 | Nguon/model | Protocol | Accuracy | Balanced Acc | Model-side latency mean / P95 | E2E latency mean / P95 | Ghi chu |
 | :--- | :--- | ---: | ---: | :--- | :--- | :--- |
-| **Ours - Triple XGB max-accuracy reference** | DAiSEE 4-class, `final_feature_manifest.csv`, `depth_robust_v2`, 3-XGB fusion | **86.44%** | **88.00%** | **23.96 / 30.20 ms** | Chua do raw-video rieng | Cho thay pipeline depth-aware + XGB fusion co tran hieu nang cao, nhung khong dung lam product band 75-77. |
+| **Ours - Triple XGB max-accuracy reference** | DAiSEE 4-class, `final_feature_manifest.csv`, `depth_robust_v2`, 3-XGB fusion | **86.44%** | **88.00%** | **23.96 / 30.20 ms** | **4,704.31 / 4,780.85 ms** | Cho thay pipeline depth-aware + XGB fusion co tran hieu nang cao, nhung khong dung lam product band 75-77. |
 | Santoni et al. 2023 - SVD-CNN | DAiSEE 4-class, OpenFace 709D -> SVD 300D, SMOTE, 80:20 split | **77.97%** | Khong cong bo | 124.12 / 140.36 ms | 11,756.86 / 12,256.12 ms | Moc accuracy tham chieu cao nhat da dung trong do an; E2E do tren raw-video pipeline sample tren may nay. |
-| **Ours - Triple XGB product target-band** | DAiSEE 4-class, `final_feature_manifest.csv`, `depth_robust_v2`, 3-XGB fusion | **76.85%** | **83.20%** | **24.80 / 25.52 ms** | Chua do raw-video rieng | Model production hien tai; accuracy nam dung band bao ve, balanced cao, model-side nhanh hon CNN reference. |
+| **Ours - Triple XGB product target-band** | DAiSEE 4-class, `final_feature_manifest.csv`, `depth_robust_v2`, 3-XGB fusion | **76.85%** | **83.20%** | **24.80 / 25.52 ms** | **4,704.27 / 4,780.48 ms** | Model production hien tai; accuracy nam dung band bao ve, balanced cao, raw-video E2E nhanh hon CNN/OpenFace reference tren benchmark nay. |
 | Ours - DeepForest calibrated baseline | DAiSEE 4-class, `final_feature_manifest.csv`, `depth_robust_v2` | 76.85% | 85.90% | 204.07 / 224.37 ms | 5,319.20 / 5,441.63 ms | Balanced cao nhung tradeoff latency kem hon Triple XGB. |
 | Santoni et al. 2023 - PCA-CNN | DAiSEE 4-class, OpenFace 709D -> PCA 300D, SMOTE, 80:20 split | 72.88% | Khong cong bo | 124.12 / 140.36 ms | 11,756.86 / 12,256.12 ms | Cung CNN body voi SVD-CNN; report goc khong cong bo latency. |
 | PriorNet 2026 | DAiSEE native engagement classification | 69.06% | Khong cong bo | Khong cong bo | Khong cong bo | Paper/preprint can doc ky protocol. |
 | DTransformer / PANet + STformer 2024 | DAiSEE 4-class | 64.00% | Khong cong bo | Khong cong bo | Khong cong bo | Moc transformer/attention gan day. |
 
-Ket luan phan bien: voi product target-band, model cua minh thap hon SVD-CNN reference khoang 1.12 diem % Accuracy, nhung co Balanced Accuracy 83.20% va model-side latency 24.80 ms, nhanh hon moc CNN da benchmark tren may nay. Neu hoi ve tran hieu nang, max-accuracy Triple XGB reference dat 86.44% Accuracy va 88.00% Balanced Accuracy voi latency tuong duong product.
+Ket luan phan bien: voi product target-band, model cua minh thap hon SVD-CNN reference khoang 1.12 diem % Accuracy, nhung co Balanced Accuracy 83.20%, model-side latency 24.80 ms va raw-video E2E 4.70 s, nhanh hon moc OpenFace+PaperCNN/Santoni benchmark 11.76 s tren may nay. Neu hoi ve tran hieu nang, max-accuracy Triple XGB reference dat 86.44% Accuracy va 88.00% Balanced Accuracy voi latency tuong duong product.
 
 ## 7. Ghi chu ve latency
 
 - `Model-side latency`: chi tinh chi phi predict sau khi da co processed feature.
 - `E2E latency` trong cac report 4-class XGBoost/Inception/Ordinal la pipeline doc processed feature sequence sample + build feature + predict, khong phai raw video end-to-end voi face extraction.
-- Triple XGB product moi chua do raw-video end-to-end rieng. Neu can tra loi hoi dong ve latency thuc te, nen chay lai raw-video benchmark: raw video -> MediaPipe FaceMesh -> windowing -> depth_robust_v2 -> tsfresh -> Triple XGB fusion.
+- Triple XGB product moi da do raw-video end-to-end tai `checkpoints/runs/paper_latency_benchmark/triple_xgb_depth_robust_e2e.json`: raw video -> MediaPipe FaceMesh -> windowing -> depth_robust_v2 -> tsfresh -> Triple XGB fusion.
 - Khi tinh tu video tho, latency se phu thuoc rat lon vao face/landmark extraction. Vi vay khi so voi paper, khong thay the latency paper bang so do noi bo neu paper khong cong bo cung protocol.
 
 ## 8. Cac file lien quan
@@ -196,6 +202,7 @@ Ket luan phan bien: voi product target-band, model cua minh thap hon SVD-CNN ref
 - Product Triple XGB HF zip: `Hnug/daisee-processed/checkpoints/runs/triple_xgb_depth_robust_target_band_product.zip`
 - Max-accuracy Triple XGB summary: `checkpoints/runs/triple_xgb_reuse_fusion_20260627_010341/fusion_maxacc_bal75/summary.json`
 - Max-accuracy Triple XGB HF zip: `Hnug/daisee-processed/checkpoints/runs/triple_xgb_depth_robust_maxacc_product.zip`
+- Raw-video Triple XGB latency benchmark: `checkpoints/runs/paper_latency_benchmark/triple_xgb_depth_robust_e2e.json`
 - DeepForest calibrated baseline: `checkpoints/runs/retrain_deep_forest_repro_balanced_4class_20260626_050152/deep_forest/summary.json`
 - Raw-video DeepForest latency benchmark: `checkpoints/runs/paper_latency_benchmark/deep_forest_product_e2e.json`
 - Fusion sweep code: `src/engagement_daisee/multiclass/fusion_sweep_xgb.py`
