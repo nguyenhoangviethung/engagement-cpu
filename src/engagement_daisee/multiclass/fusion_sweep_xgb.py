@@ -101,7 +101,7 @@ def _rank(
     metrics: dict[str, object],
     min_accuracy: float,
     min_balanced_accuracy: float,
-    max_accuracy: float,
+    accuracy_upper_bound: float,
     max_balanced_accuracy: float,
     selection_mode: str,
 ) -> tuple[int, float, float, float, float]:
@@ -109,13 +109,11 @@ def _rank(
     balanced = float(metrics["balanced_accuracy"])
     f1_macro = float(metrics.get("f1_macro", 0.0))
     within_lower = accuracy >= min_accuracy and balanced >= min_balanced_accuracy
-    within_upper = accuracy <= max_accuracy and balanced <= max_balanced_accuracy
+    within_upper = accuracy <= accuracy_upper_bound and balanced <= max_balanced_accuracy
     feasible = int(within_lower and within_upper)
-    upper_penalty = max(0.0, accuracy - max_accuracy) + max(0.0, balanced - max_balanced_accuracy)
-    if selection_mode == "max_accuracy":
-        return feasible, -upper_penalty, accuracy, balanced, f1_macro
+    upper_penalty = max(0.0, accuracy - accuracy_upper_bound) + max(0.0, balanced - max_balanced_accuracy)
     if selection_mode == "target_band":
-        target_accuracy = (min_accuracy + max_accuracy) / 2.0
+        target_accuracy = (min_accuracy + accuracy_upper_bound) / 2.0
         return feasible, -upper_penalty, balanced, f1_macro, -abs(accuracy - target_accuracy)
     # Prefer candidates inside the target window. Inside that window, maximize the
     # weaker metric first so the selected model is easier to defend as balanced.
@@ -136,7 +134,7 @@ def run_sweep(
     weight_step: float,
     min_accuracy: float,
     min_balanced_accuracy: float,
-    max_accuracy: float,
+    accuracy_upper_bound: float,
     max_balanced_accuracy: float,
     selection_mode: str,
     selection_split: str,
@@ -221,14 +219,14 @@ def run_sweep(
                         metrics,
                         min_accuracy,
                         min_balanced_accuracy,
-                        max_accuracy,
+                        accuracy_upper_bound,
                         max_balanced_accuracy,
                         selection_mode,
                     ) > _rank(
                         best_metrics,
                         min_accuracy,
                         min_balanced_accuracy,
-                        max_accuracy,
+                        accuracy_upper_bound,
                         max_balanced_accuracy,
                         selection_mode,
                     ):
@@ -267,7 +265,7 @@ def run_sweep(
         "feature_mode": feature_mode,
         "minimum_accuracy": min_accuracy,
         "minimum_balanced_accuracy": min_balanced_accuracy,
-        "maximum_accuracy": max_accuracy,
+        "accuracy_upper_bound": accuracy_upper_bound,
         "maximum_balanced_accuracy": max_balanced_accuracy,
         "selection_mode": selection_mode,
         "selection_split": selection_split,
@@ -306,11 +304,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--weight-step", type=float, default=0.05)
     parser.add_argument("--min-accuracy", type=float, default=0.75)
     parser.add_argument("--min-balanced-accuracy", type=float, default=0.75)
-    parser.add_argument("--max-accuracy", type=float, default=1.0)
+    parser.add_argument("--accuracy-upper-bound", type=float, default=1.0)
     parser.add_argument("--max-balanced-accuracy", type=float, default=1.0)
     parser.add_argument(
         "--selection-mode",
-        choices=["balanced_guarded", "max_accuracy", "target_band"],
+        choices=["balanced_guarded", "target_band"],
         default="balanced_guarded",
         help="Ranking rule for validation candidates after applying metric guardrails.",
     )
@@ -344,7 +342,7 @@ def main() -> None:
         weight_step=args.weight_step,
         min_accuracy=args.min_accuracy,
         min_balanced_accuracy=args.min_balanced_accuracy,
-        max_accuracy=args.max_accuracy,
+        accuracy_upper_bound=args.accuracy_upper_bound,
         max_balanced_accuracy=args.max_balanced_accuracy,
         selection_mode=args.selection_mode,
         selection_split=args.selection_split,

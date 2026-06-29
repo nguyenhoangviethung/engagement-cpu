@@ -7,7 +7,6 @@ Tai lieu nay dung cho production/devops khi can reproduce va deploy model DAiSEE
 | Muc dich | Model | Ly do |
 | :--- | :--- | :--- |
 | Product mac dinh | `triple_xgb_depth_robust_target_band_product` | Accuracy 76.85%, Balanced Accuracy 83.20%, F1 Macro 76.91%, model-side latency mean 24.80 ms tren CPU. Day la model nam dung band product `75% <= accuracy <= 77%` va `balanced_accuracy > 75%`. |
-| Performance reference | `triple_xgb_depth_robust_maxacc_product` | Accuracy 86.44%, Balanced Accuracy 88.00%, F1 Macro 89.54%, model-side latency mean 23.96 ms. Dung lam upper-performance reference, khong dung lam product neu can giu accuracy trong moc 75-77%. |
 | Alternative calibrated baseline | `deep_forest_product_4class` | Accuracy 76.85%, Balanced Accuracy 85.90%, F1 Macro 78.02%, nhung model-side latency mean 204.07 ms; cham hon Triple XGB moi. |
 | CPU sieu nhe baseline | `inception_lite_ensemble_xgb` | Accuracy 73.82%, Balanced Accuracy 76.35%, model-side latency mean 1.18 ms. |
 
@@ -36,12 +35,6 @@ Product bundle tren Hugging Face:
 
 ```text
 Hnug/daisee-processed/checkpoints/runs/triple_xgb_depth_robust_target_band_product.zip
-```
-
-Performance reference bundle tren Hugging Face:
-
-```text
-Hnug/daisee-processed/checkpoints/runs/triple_xgb_depth_robust_maxacc_product.zip
 ```
 
 Local product bundle:
@@ -130,18 +123,6 @@ selection_mode = target_band
 selection_split = test
 ```
 
-Performance reference fusion config:
-
-```text
-weights:
-  final_xgb = 0.04
-  boost_xgb = 0.66
-  targeted_xgb = 0.30
-bias_power = 0.20
-temperature = 1.00
-selection_mode = max_accuracy
-```
-
 ## 4. Triple XGB fusion formula
 
 ```python
@@ -195,16 +176,6 @@ Ket qua ky vong cua product target-band tren test:
 | Model-side latency P95 | 25.52 ms |
 | Raw-video E2E mean | 4,704.27 ms |
 | Raw-video E2E P95 | 4,780.48 ms |
-
-Ket qua ky vong cua max-accuracy reference tren test:
-
-| Metric | Value |
-| :--- | ---: |
-| Accuracy | 86.44% |
-| Balanced Accuracy | 88.00% |
-| F1 Macro | 89.54% |
-| Model-side latency mean | 23.96 ms |
-| Model-side latency P95 | 30.20 ms |
 
 ## 6. Service response nen co
 
@@ -265,7 +236,6 @@ Fallback goi y:
 | Model | Latency kind | Model-side mean / P95 | E2E mean / P95 | Ghi chu |
 | :--- | :--- | :--- | :--- | :--- |
 | `triple_xgb_depth_robust_target_band_product` | raw-video -> MediaPipe FaceMesh -> depth_robust_v2 -> tsfresh -> 3 XGB fusion | 24.80 / 25.52 ms | 4,704.27 / 4,780.48 ms | Product mac dinh. |
-| `triple_xgb_depth_robust_maxacc_product` | raw-video -> MediaPipe FaceMesh -> depth_robust_v2 -> tsfresh -> 3 XGB fusion | 23.96 / 30.20 ms | 4,704.31 / 4,780.85 ms | Performance reference. |
 | `deep_forest_product_4class` | raw-video -> MediaPipe FaceMesh -> depth_robust_v2 -> cascade forest | 204.07 / 224.37 ms | 5,319.20 / 5,441.63 ms | Alternative baseline, cham hon Triple XGB model-side. |
 | `legacy_xgb_product` | raw-video -> MediaPipe FaceMesh -> tsfresh -> fusion | 20.15 / 20.83 ms | 4,874.66 / 4,896.21 ms | Legacy feature cu, khong phai depth_robust_v2 final manifest. |
 | `paper_cnn_santoni` | raw-video pipeline sample | 124.12 / 140.36 ms | 11,756.86 / 12,256.12 ms | SOTA/paper reference. |
@@ -279,7 +249,5 @@ Triple XGB product da duoc do raw-video end-to-end rieng tai `checkpoints/runs/p
 - Bao cao chinh 4-class: `checkpoints/reports/bao_cao_ket_qua_huan_luyen_models.md`
 - Product Triple XGB target-band summary: `checkpoints/runs/triple_xgb_test_target_acc75_77_bal75_20260627_014957/summary.json`
 - Product Triple XGB HF zip: `Hnug/daisee-processed/checkpoints/runs/triple_xgb_depth_robust_target_band_product.zip`
-- Max-accuracy Triple XGB summary: `checkpoints/runs/triple_xgb_reuse_fusion_20260627_010341/fusion_maxacc_bal75/summary.json`
-- Max-accuracy Triple XGB HF zip: `Hnug/daisee-processed/checkpoints/runs/triple_xgb_depth_robust_maxacc_product.zip`
 - Raw-video Triple XGB latency benchmark: `checkpoints/runs/paper_latency_benchmark/triple_xgb_depth_robust_e2e.json`
 - DeepForest calibrated baseline: `checkpoints/runs/retrain_deep_forest_repro_balanced_4class_20260626_050152/deep_forest/summary.json`

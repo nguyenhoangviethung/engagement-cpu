@@ -99,7 +99,6 @@ echo "Manifest: $(shell_quote "$MANIFEST")" | tee -a $(shell_quote "$run_log")
 BASE_DIR=$(shell_quote "$run_root/base_xgb")
 BOOST_DIR=$(shell_quote "$run_root/boost_xgb")
 TARGETED_DIR=$(shell_quote "$run_root/targeted_xgb")
-FUSION_MAXACC=$(shell_quote "$run_root/fusion_maxacc_bal75/summary.json")
 FUSION_BAND=$(shell_quote "$run_root/fusion_acc75_77_bal75/summary.json")
 
 echo "=== [1/5] train base xgboost ===" | tee -a $(shell_quote "$run_log")
@@ -146,27 +145,7 @@ bash $(shell_quote "$WORKDIR/scripts/lib/run_python.sh") --env $(shell_quote "$C
   --latency-warmup 20 \
   --latency-iters 120 2>&1 | tee -a $(shell_quote "$run_log")
 
-echo "=== [4/5] fusion target: max accuracy with balanced >= 75% ===" | tee -a $(shell_quote "$run_log")
-bash $(shell_quote "$WORKDIR/scripts/lib/run_python.sh") --env $(shell_quote "$CONDA_ENV") --workdir $(shell_quote "$WORKDIR") \
-  env PYTHONPATH=$(shell_quote "$WORKDIR/src") python -u -m engagement_daisee.multiclass.fusion_sweep_xgb \
-  --manifest $(shell_quote "$MANIFEST") \
-  --output-json "\$FUSION_MAXACC" \
-  --final-xgb-model "\$BASE_DIR/xgboost/model.json" \
-  --final-xgb-preprocessor "\$BASE_DIR/xgboost/preprocessor.npz" \
-  --boost-xgb-model "\$BOOST_DIR/model.json" \
-  --boost-xgb-preprocessor "\$BOOST_DIR/preprocessor.npz" \
-  --targeted-xgb-model "\$TARGETED_DIR/model.json" \
-  --targeted-xgb-preprocessor "\$TARGETED_DIR/preprocessor.npz" \
-  --feature-mode $(shell_quote "$FEATURE_MODE") \
-  --weight-step $(shell_quote "$WEIGHT_STEP") \
-  --min-accuracy 0.0 \
-  --min-balanced-accuracy 0.75 \
-  --max-accuracy 1.0 \
-  --max-balanced-accuracy 1.0 \
-  --latency-warmup 20 \
-  --latency-iters 120 2>&1 | tee -a $(shell_quote "$run_log")
-
-echo "=== [5/5] fusion target: accuracy 75-77% with balanced >= 75% ===" | tee -a $(shell_quote "$run_log")
+echo "=== [4/4] fusion target: accuracy 75-77% with balanced >= 75% ===" | tee -a $(shell_quote "$run_log")
 bash $(shell_quote "$WORKDIR/scripts/lib/run_python.sh") --env $(shell_quote "$CONDA_ENV") --workdir $(shell_quote "$WORKDIR") \
   env PYTHONPATH=$(shell_quote "$WORKDIR/src") python -u -m engagement_daisee.multiclass.fusion_sweep_xgb \
   --manifest $(shell_quote "$MANIFEST") \
@@ -181,17 +160,17 @@ bash $(shell_quote "$WORKDIR/scripts/lib/run_python.sh") --env $(shell_quote "$C
   --weight-step $(shell_quote "$WEIGHT_STEP") \
   --min-accuracy 0.75 \
   --min-balanced-accuracy 0.75 \
-  --max-accuracy 0.77 \
+  --accuracy-upper-bound 0.77 \
   --max-balanced-accuracy 1.0 \
   --latency-warmup 20 \
   --latency-iters 120 2>&1 | tee -a $(shell_quote "$run_log")
 
-python - <<'PY' "\$BASE_DIR/xgboost/summary.json" "\$BOOST_DIR/summary.json" "\$TARGETED_DIR/summary.json" "\$FUSION_MAXACC" "\$FUSION_BAND" "$(shell_quote "$run_root/selection_summary.json")" | tee -a $(shell_quote "$run_log")
+python - <<'PY' "\$BASE_DIR/xgboost/summary.json" "\$BOOST_DIR/summary.json" "\$TARGETED_DIR/summary.json" "\$FUSION_BAND" "$(shell_quote "$run_root/selection_summary.json")" | tee -a $(shell_quote "$run_log")
 import json
 import sys
 from pathlib import Path
 
-base, boost, targeted, maxacc, band, out = map(Path, sys.argv[1:])
+base, boost, targeted, band, out = map(Path, sys.argv[1:])
 
 def load(path):
     return json.loads(path.read_text(encoding="utf-8"))
@@ -202,7 +181,6 @@ def metrics(payload):
 payload = {
     "run_root": str(out.parent),
     "criteria": {
-        "maxacc_bal75": "highest validation-selected Triple-XGB fusion candidate with balanced_accuracy >= 0.75",
         "acc75_77_bal75": "validation-selected Triple-XGB fusion candidate with 0.75 <= accuracy <= 0.77 and balanced_accuracy >= 0.75",
     },
     "components": {
@@ -211,7 +189,6 @@ payload = {
         "targeted_xgb": {"summary": str(targeted), "test_metrics": metrics(load(targeted))},
     },
     "selected_fusions": {
-        "maxacc_bal75": {"summary": str(maxacc), "test_metrics": metrics(load(maxacc)), "selected": load(maxacc).get("selected")},
         "acc75_77_bal75": {"summary": str(band), "test_metrics": metrics(load(band)), "selected": load(band).get("selected")},
     },
 }

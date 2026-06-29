@@ -13,7 +13,7 @@ MANIFEST=""
 WEIGHT_STEP=0.05
 MIN_ACCURACY=0.75
 MIN_BALANCED_ACCURACY=0.75
-MAX_ACCURACY=1.0
+ACCURACY_UPPER_BOUND=1.0
 MAX_BALANCED_ACCURACY=1.0
 
 shell_quote() {
@@ -40,7 +40,7 @@ while [[ $# -gt 0 ]]; do
     --weight-step) WEIGHT_STEP="$2"; shift 2 ;;
     --min-accuracy) MIN_ACCURACY="$2"; shift 2 ;;
     --min-balanced-accuracy) MIN_BALANCED_ACCURACY="$2"; shift 2 ;;
-    --max-accuracy) MAX_ACCURACY="$2"; shift 2 ;;
+    --accuracy-upper-bound) ACCURACY_UPPER_BOUND="$2"; shift 2 ;;
     --max-balanced-accuracy) MAX_BALANCED_ACCURACY="$2"; shift 2 ;;
     --env) CONDA_ENV="$2"; shift 2 ;;
     *) echo "Unknown argument: $1"; exit 1 ;;
@@ -74,7 +74,7 @@ echo "=== fusion sweep xgb started at \$(date) ===" | tee -a $(shell_quote "$run
   --weight-step $(shell_quote "$WEIGHT_STEP") \
   --min-accuracy $(shell_quote "$MIN_ACCURACY") \
   --min-balanced-accuracy $(shell_quote "$MIN_BALANCED_ACCURACY") \
-  --max-accuracy $(shell_quote "$MAX_ACCURACY") \
+  --accuracy-upper-bound $(shell_quote "$ACCURACY_UPPER_BOUND") \
   --max-balanced-accuracy $(shell_quote "$MAX_BALANCED_ACCURACY") \
   --latency-warmup 30 \
   --latency-iters 200 2>&1 | tee -a $(shell_quote "$run_log")

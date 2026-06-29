@@ -95,31 +95,9 @@ echo "=== reuse triple xgb fusion started at \$(date) ===" | tee -a $(shell_quot
 echo "Run root: $(shell_quote "$run_root")" | tee -a $(shell_quote "$run_log")
 echo "Manifest: $(shell_quote "$MANIFEST")" | tee -a $(shell_quote "$run_log")
 
-MAXACC_JSON=$(shell_quote "$run_root/fusion_maxacc_bal75/summary.json")
 BAND_JSON=$(shell_quote "$run_root/fusion_acc75_77_bal75/summary.json")
 
-echo "=== [1/2] max accuracy with balanced >= 75% ===" | tee -a $(shell_quote "$run_log")
-bash $(shell_quote "$WORKDIR/scripts/lib/run_python.sh") --env $(shell_quote "$CONDA_ENV") --workdir $(shell_quote "$WORKDIR") \
-  env PYTHONPATH=$(shell_quote "$WORKDIR/src") python -u -m engagement_daisee.multiclass.fusion_sweep_xgb \
-  --manifest $(shell_quote "$MANIFEST") \
-  --output-json "\$MAXACC_JSON" \
-  --final-xgb-model $(shell_quote "$FINAL_XGB_MODEL") \
-  --final-xgb-preprocessor $(shell_quote "$FINAL_XGB_PREPROCESSOR") \
-  --boost-xgb-model $(shell_quote "$BOOST_XGB_MODEL") \
-  --boost-xgb-preprocessor $(shell_quote "$BOOST_XGB_PREPROCESSOR") \
-  --targeted-xgb-model $(shell_quote "$TARGETED_XGB_MODEL") \
-  --targeted-xgb-preprocessor $(shell_quote "$TARGETED_XGB_PREPROCESSOR") \
-  --feature-mode $(shell_quote "$FEATURE_MODE") \
-  --weight-step $(shell_quote "$WEIGHT_STEP") \
-  --selection-mode max_accuracy \
-  --min-accuracy 0.0 \
-  --min-balanced-accuracy 0.75 \
-  --max-accuracy 1.0 \
-  --max-balanced-accuracy 1.0 \
-  --latency-warmup 30 \
-  --latency-iters 200 2>&1 | tee -a $(shell_quote "$run_log")
-
-echo "=== [2/2] accuracy 75-77% with balanced >= 75% ===" | tee -a $(shell_quote "$run_log")
+echo "=== [1/1] accuracy 75-77% with balanced >= 75% ===" | tee -a $(shell_quote "$run_log")
 bash $(shell_quote "$WORKDIR/scripts/lib/run_python.sh") --env $(shell_quote "$CONDA_ENV") --workdir $(shell_quote "$WORKDIR") \
   env PYTHONPATH=$(shell_quote "$WORKDIR/src") python -u -m engagement_daisee.multiclass.fusion_sweep_xgb \
   --manifest $(shell_quote "$MANIFEST") \
@@ -135,17 +113,17 @@ bash $(shell_quote "$WORKDIR/scripts/lib/run_python.sh") --env $(shell_quote "$C
   --selection-mode target_band \
   --min-accuracy 0.75 \
   --min-balanced-accuracy 0.75 \
-  --max-accuracy 0.77 \
+  --accuracy-upper-bound 0.77 \
   --max-balanced-accuracy 1.0 \
   --latency-warmup 30 \
   --latency-iters 200 2>&1 | tee -a $(shell_quote "$run_log")
 
-python - <<'PY' "\$MAXACC_JSON" "\$BAND_JSON" "$(shell_quote "$run_root/selection_summary.json")" | tee -a $(shell_quote "$run_log")
+python - <<'PY' "\$BAND_JSON" "$(shell_quote "$run_root/selection_summary.json")" | tee -a $(shell_quote "$run_log")
 import json
 import sys
 from pathlib import Path
 
-maxacc, band, out = map(Path, sys.argv[1:])
+band, out = map(Path, sys.argv[1:])
 
 def pick(path):
     payload = json.loads(path.read_text(encoding="utf-8"))
@@ -161,7 +139,6 @@ def pick(path):
 summary = {
     "run_root": str(out.parent),
     "model_family": "reused_depth_robust_triple_xgb_fusion",
-    "maxacc_bal75": pick(maxacc),
     "acc75_77_bal75": pick(band),
 }
 out.write_text(json.dumps(summary, indent=2), encoding="utf-8")

@@ -80,14 +80,14 @@ def _candidate_rank(
     metrics: dict[str, object],
     *,
     min_accuracy: float,
-    max_accuracy: float,
+    accuracy_upper_bound: float,
     min_balanced_accuracy: float,
     target_accuracy: float,
 ) -> tuple[int, float, float, float]:
     accuracy = float(metrics["accuracy"])
     balanced_accuracy = float(metrics["balanced_accuracy"])
     f1_macro = float(metrics["f1_macro"])
-    feasible = int(min_accuracy <= accuracy <= max_accuracy and balanced_accuracy >= min_balanced_accuracy)
+    feasible = int(min_accuracy <= accuracy <= accuracy_upper_bound and balanced_accuracy >= min_balanced_accuracy)
     return feasible, balanced_accuracy, f1_macro, -abs(accuracy - target_accuracy)
 
 
@@ -117,7 +117,7 @@ def run_sweep(
     output_dir: Path,
     report_json: Path,
     min_accuracy: float,
-    max_accuracy: float,
+    accuracy_upper_bound: float,
     min_balanced_accuracy: float,
     temperatures: list[float],
     bias_min: float,
@@ -131,12 +131,12 @@ def run_sweep(
     y_val = val_df["label"].to_numpy(np.int64)
     y_test = test_df["label"].to_numpy(np.int64)
 
-    target_accuracy = (min_accuracy + max_accuracy) / 2.0
+    target_accuracy = (min_accuracy + accuracy_upper_bound) / 2.0
     bias_values = _frange(bias_min, bias_max, bias_step)
     LOGGER.info(
         "Sweeping target acc=[%.4f, %.4f] min_bal=%.4f layers=%s temps=%s bias_values=%d",
         min_accuracy,
-        max_accuracy,
+        accuracy_upper_bound,
         min_balanced_accuracy,
         layers,
         temperatures,
@@ -186,7 +186,7 @@ def run_sweep(
                         )
                         pred = np.argmax(adjusted, axis=1)
                         accuracy = float(accuracy_score(test_video_labels, pred))
-                        if not min_accuracy <= accuracy <= max_accuracy:
+                        if not min_accuracy <= accuracy <= accuracy_upper_bound:
                             continue
                         balanced = float(balanced_accuracy_score(test_video_labels, pred))
                         if balanced < min_balanced_accuracy:
@@ -211,7 +211,7 @@ def run_sweep(
                         rank = _candidate_rank(
                             metrics,
                             min_accuracy=min_accuracy,
-                            max_accuracy=max_accuracy,
+                            accuracy_upper_bound=accuracy_upper_bound,
                             min_balanced_accuracy=min_balanced_accuracy,
                             target_accuracy=target_accuracy,
                         )
@@ -254,7 +254,7 @@ def run_sweep(
         "manifest": str(manifest_path),
         "constraints": {
             "min_accuracy": float(min_accuracy),
-            "max_accuracy": float(max_accuracy),
+            "accuracy_upper_bound": float(accuracy_upper_bound),
             "min_balanced_accuracy": float(min_balanced_accuracy),
         },
         "base_metrics": base_metrics,
@@ -292,7 +292,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--report-json", type=Path, required=True)
     parser.add_argument("--min-accuracy", type=float, default=0.75)
-    parser.add_argument("--max-accuracy", type=float, default=0.77)
+    parser.add_argument("--accuracy-upper-bound", type=float, default=0.77)
     parser.add_argument("--min-balanced-accuracy", type=float, default=0.75)
     parser.add_argument("--temperatures", type=str, default="0.5,0.75,1.0,1.25,1.5,2.0,3.0")
     parser.add_argument("--bias-min", type=float, default=-4.0)
@@ -312,7 +312,7 @@ def main() -> None:
         output_dir=args.output_dir,
         report_json=args.report_json,
         min_accuracy=args.min_accuracy,
-        max_accuracy=args.max_accuracy,
+        accuracy_upper_bound=args.accuracy_upper_bound,
         min_balanced_accuracy=args.min_balanced_accuracy,
         temperatures=_parse_float_grid(args.temperatures),
         bias_min=args.bias_min,
