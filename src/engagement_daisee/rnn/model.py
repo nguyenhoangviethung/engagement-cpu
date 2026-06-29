@@ -6,8 +6,10 @@ This module is kept to avoid breaking older imports.
 
 from engagement_daisee.rnn.models import (
     BasicGRUClassifier,
+    EngagementCNNGRUFusion,
     EngagementBiLSTM,
     EngagementGRU,
+    EngagementResidualBiGRUAttention,
     EngagementTCN,
     EngagementTinyTransformer,
     TemporalAttention,
@@ -23,5 +25,7 @@ __all__ = [
     "EngagementBiLSTM",
     "EngagementTCN",
     "EngagementTinyTransformer",
+    "EngagementCNNGRUFusion",
+    "EngagementResidualBiGRUAttention",
     "build_sequence_model",
 ]

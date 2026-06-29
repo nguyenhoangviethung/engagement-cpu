@@ -1,0 +1,40 @@
+=== Extract started at Sat Jun 20 04:00:50 UTC 2026 ===
+Run ID: depth_robust_20260620_040050
+Run features dir: /mnt/rescue/home/bear/engagement-cpu/data/processed/runs/extract_depth_robust_20260620_040050/features
+Run manifest: /mnt/rescue/home/bear/engagement-cpu/data/processed/runs/extract_depth_robust_20260620_040050/feature_manifest.csv
+2026-06-20 04:00:51 | INFO | Starting feature extraction
+2026-06-20 04:00:51 | INFO | Config | labels=/mnt/rescue/home/bear/engagement-cpu/data/processed/runs/daisee_4class_final_dataset/video_labels_4class.csv | videos=/mnt/rescue/home/bear/engagement-cpu/data/raw/daisee/DAiSEE/DataSet | features=/mnt/rescue/home/bear/engagement-cpu/data/processed/runs/extract_depth_robust_20260620_040050/features | manifest=/mnt/rescue/home/bear/engagement-cpu/data/processed/runs/extract_depth_robust_20260620_040050/feature_manifest.csv | sample=False | seed=42 | frame_stride=1 | max_frames=0 | resize_width=0 | feature_set=depth_robust | temporal_enrichment=velocity_std | label_mode=four_class | output_dim=300
+2026-06-20 04:00:54 | INFO | Loaded 7672 label rows after sampling
+2026-06-20 04:00:54 | INFO | Indexed 9068 unique videos from raw directory
+2026-06-20 04:00:54 | INFO | Processing 7672 videos
+2026-06-20 04:00:54 | INFO | Downloading MediaPipe FaceLandmarker model to /home/bear/.cache/engagement_daisee/face_landmarker.task
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/mnt/rescue/home/bear/engagement-cpu/src/engagement_daisee/rnn/extract_features.py", line 786, in <module>
+    main()
+  File "/mnt/rescue/home/bear/engagement-cpu/src/engagement_daisee/rnn/extract_features.py", line 767, in main
+    manifest_path = extract_features(
+                    ^^^^^^^^^^^^^^^^^
+  File "/mnt/rescue/home/bear/engagement-cpu/src/engagement_daisee/rnn/extract_features.py", line 641, in extract_features
+    face_mesh = _create_face_landmarker()
+                ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/rescue/home/bear/engagement-cpu/src/engagement_daisee/rnn/extract_features.py", line 128, in _create_face_landmarker
+    return _TaskFaceLandmarker(model_path)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/rescue/home/bear/engagement-cpu/src/engagement_daisee/rnn/extract_features.py", line 88, in __init__
+    self._detector = vision.FaceLandmarker.create_from_options(options)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/rescue/home/bear/engagement-cpu/.venv/lib/python3.12/site-packages/mediapipe/tasks/python/vision/face_landmarker.py", line 3149, in create_from_options
+    lib = mediapipe_c_bindings_lib.load_shared_library(_CTYPES_SIGNATURES)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/rescue/home/bear/engagement-cpu/.venv/lib/python3.12/site-packages/mediapipe/tasks/python/core/mediapipe_c_bindings.py", line 83, in load_shared_library
+    raw_lib = load_raw_library()
+              ^^^^^^^^^^^^^^^^^^
+  File "/mnt/rescue/home/bear/engagement-cpu/.venv/lib/python3.12/site-packages/mediapipe/tasks/python/core/mediapipe_c_bindings.py", line 54, in load_raw_library
+    _shared_lib = ctypes.CDLL(absolute_lib_path)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/rescue/usr/lib/python3.12/ctypes/__init__.py", line 379, in __init__
+    self._handle = _dlopen(self._name, mode)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+OSError: libGLESv2.so.2: cannot open shared object file: No such file or directory

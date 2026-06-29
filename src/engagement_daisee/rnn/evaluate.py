@@ -9,6 +9,7 @@ import torch
 from torch.utils.data import DataLoader, Subset
 
 from engagement_daisee.common.config import FEATURE_MANIFEST_CSV, NUM_WORKERS
+from engagement_daisee.common.manifest import normalize_manifest_columns
 from engagement_daisee.rnn.dataset import FeatureSequenceDataset
 from engagement_daisee.rnn.optimize_inference import _build_model_from_checkpoint
 
@@ -99,6 +100,7 @@ def _compute_binary_metrics(labels: np.ndarray, probabilities: np.ndarray, thres
 
 
 def _split_indices(manifest: pd.DataFrame) -> tuple[list[int], list[int], list[int]]:
+    manifest = normalize_manifest_columns(manifest)
     split_series = manifest["split"].astype(str).str.strip().str.lower()
     train_indices = split_series[split_series == "train"].index.tolist()
     val_indices = split_series[split_series == "validation"].index.tolist()

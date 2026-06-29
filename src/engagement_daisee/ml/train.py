@@ -13,6 +13,7 @@ from sklearn.decomposition import PCA, TruncatedSVD
 from xgboost import XGBClassifier
 
 from engagement_daisee.common.config import CHECKPOINT_DIR, FEATURE_MANIFEST_CSV, RANDOM_SEED
+from engagement_daisee.common.manifest import normalize_manifest_columns
 
 try:
     from lightgbm import LGBMClassifier
@@ -297,7 +298,7 @@ def _load_manifest(manifest_path: Path) -> pd.DataFrame:
     if not manifest_path.exists():
         raise FileNotFoundError(f"Manifest not found: {manifest_path}")
 
-    manifest = pd.read_csv(manifest_path)
+    manifest = normalize_manifest_columns(pd.read_csv(manifest_path))
     required_columns = {"feature_path", "label", "split"}
     missing = required_columns - set(manifest.columns)
     if missing:
@@ -689,7 +690,6 @@ def train_ml(
         "selected_threshold": float(selected_threshold),
         "checkpoint_metric": f"validation_{threshold_objective}",
         "threshold_objective": threshold_objective,
-        "validation_metrics": val_metrics,
         "test_metrics": test_metrics,
         "best_iteration": int(best_iteration),
         "feature_mode": feature_mode,
@@ -703,17 +703,6 @@ def train_ml(
     _save_feature_preprocessor(preprocessor_path, preprocessor_config)
     summary["preprocessor_path"] = str(preprocessor_path)
     summary_path.write_text(json.dumps(summary, indent=2))
-
-    LOGGER.info(
-        "Validation | acc=%.4f bal_acc=%.4f recall1=%.4f precision1=%.4f f2=%.4f threshold=%.2f objective=%s",
-        val_metrics["accuracy"],
-        val_metrics["balanced_accuracy"],
-        val_metrics["recall_pos"],
-        val_metrics["precision_pos"],
-        val_metrics["f2_pos"],
-        selected_threshold,
-        threshold_objective,
-    )
     LOGGER.info(
         "Test | acc=%.4f recall1=%.4f precision1=%.4f f2=%.4f threshold=%.2f",
         test_metrics["accuracy"],

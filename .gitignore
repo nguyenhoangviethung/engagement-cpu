@@ -1,5 +1,5 @@
-# logs/
-checkpoint/runs/
+logs/
+/checkpoints/runs/
 data/
 data/raw/
 data/processed/

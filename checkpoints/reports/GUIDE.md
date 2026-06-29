@@ -1,241 +1,253 @@
-# Huong dan infer cho production pipeline
+# GUIDE: Production inference cho model DAiSEE 4-class
 
-Tai lieu nay mo ta cach dung cac artifact hien co de suy luan trong moi truong production. Muc tieu la deploy nhanh, uu tien CPU, va tan dung cac model da duoc day len Hugging Face duoi dang zip.
+Tai lieu nay dung cho production/devops khi can reproduce va deploy model DAiSEE 4-class hien tai.
 
-## 1. Chon pipeline nao cho production
+## 1. Model product nen dung
 
-Co 2 huong infer phu hop nhat voi repo hien tai:
+| Muc dich | Model | Ly do |
+| :--- | :--- | :--- |
+| Product mac dinh | `triple_xgb_depth_robust_target_band_product` | Accuracy 76.85%, Balanced Accuracy 83.20%, F1 Macro 76.91%, model-side latency mean 24.80 ms tren CPU. Day la model nam dung band product `75% <= accuracy <= 77%` va `balanced_accuracy > 75%`. |
+| Alternative calibrated baseline | `deep_forest_product_4class` | Accuracy 76.85%, Balanced Accuracy 85.90%, F1 Macro 78.02%, nhung model-side latency mean 204.07 ms; cham hon Triple XGB moi. |
+| CPU sieu nhe baseline | `inception_lite_ensemble_xgb` | Accuracy 73.82%, Balanced Accuracy 76.35%, model-side latency mean 1.18 ms. |
 
-1. `RNN GRU`:
-   - Chat luong tot nhat trong bao cao.
-   - Nen dung cho production neu uu tien do chinh xac.
-   - Nen convert checkpoint `.pt` thanh TorchScript `.ts` truoc khi deploy CPU.
-
-2. `XGBoost final`:
-   - Nhe hon, de deploy hon.
-   - Hop khi uu tien don gian va latency phan model.
-   - Van can sequence `.npy` dau vao, sau do tu trich feature tabular trong luc infer.
-
-Khuyen nghi mac dinh:
-
-- Neu can model manh nhat: dung `train_all_train_all.zip` -> `rnn_gru`.
-- Neu can model nhe va don gian: dung `trainml_train_all_ml.zip` -> `engagement_xgb.json`.
-
-## 2. Dieu can nho nhat ve dau vao
-
-Entry point infer hien tai trong repo khong nhan video tho truc tiep.
-
-Ca 2 nhanh `rnn` va `ml` deu nhan dau vao la file `sequence .npy`:
-
-- `rnn`: [src/engagement_daisee/rnn/infer.py](../../src/engagement_daisee/rnn/infer.py)
-- `ml`: [src/engagement_daisee/ml/infer.py](../../src/engagement_daisee/ml/infer.py)
-
-Dieu nay co nghia la production pipeline can co 2 tang:
-
-1. `Preprocess`: video/frame stream -> feature extraction -> windowing/sequence `.npy`
-2. `Model infer`: `.npy` -> xac suat + nhan
-
-Neu muon pipeline online tu webcam/video:
-
-- MediaPipe feature extraction: [src/engagement_daisee/mediapipe/extract_features.py](../../src/engagement_daisee/mediapipe/extract_features.py)
-- RNN-style sequence extraction: [src/engagement_daisee/rnn/extract_features.py](../../src/engagement_daisee/rnn/extract_features.py)
-
-## 3. Artifact can lay tu Hugging Face
-
-Tren HF, checkpoint dang duoc luu chu yeu duoi dang zip tung run, vi script upload dung `--zip-runs`:
-
-- [scripts/data/hf_push_data.sh](../../scripts/data/hf_push_data.sh:309)
-
-No zip toan bo noi dung cua moi run folder roi moi upload. Nghia la model weights, summary json, eval json, preprocess artifact... nam ben trong file zip cua run.
-
-Nhung goi can quan tam:
-
-- `checkpoints/runs/train_all_train_all.zip`
-  - chua cac model `rnn_gru`, `rnn_tcn`, `rnn_tiny_transformer`, `gru_basic`
-- `checkpoints/runs/trainml_train_all_ml.zip`
-  - chua model XGBoost final
-- `checkpoints/runs/train_all_phase34_20260523_030236.zip`
-  - chua CNN tot nhat trong nhom da bao cao
-
-Ngoai ra, cac file tong hop da co san tren HF:
-
-- `checkpoints/reports/selected_model_performance.csv`
-- `checkpoints/reports/run_metrics_manifest709.csv`
-- `checkpoints/reports/bao_cao_ket_qua_huan_luyen_models.md`
-
-## 4. Pipeline de xuat cho production
-
-### 4.1 Pipeline A: RNN GRU production
-
-Day la pipeline nen uu tien neu ban can model manh nhat.
-
-Buoc 1: lay va giai nen run zip
-
-- Lay `checkpoints/runs/train_all_train_all.zip` tu HF
-- Giai nen vao mot thu muc tam, vi du:
-
-```bash
-mkdir -p /tmp/engagement_prod
-unzip train_all_train_all.zip -d /tmp/engagement_prod/train_all_train_all
-```
-
-Sau khi giai nen, checkpoint can dung la:
+Product model hien tai:
 
 ```text
-/tmp/engagement_prod/train_all_train_all/rnn_gru/engagement_gru.pt
+triple_xgb_depth_robust_target_band_product
+model_family = triple_xgb_depth_robust_fusion
+manifest = data/processed/final_feature_manifest.csv
+input_shape = [30, 504]
+feature_mode = tsfresh tren depth_robust_v2 sequence
+components = final_xgb + boost_xgb + targeted_xgb
+weights = [0.72, 0.26, 0.02]
+bias_power = 0.30
+temperature = 1.00
+prediction = argmax(calibrated_weighted_average_predict_proba)
 ```
 
-Buoc 2: convert checkpoint sang artifact deploy CPU
-
-Script convert:
-
-- [src/engagement_daisee/rnn/optimize_inference.py](../../src/engagement_daisee/rnn/optimize_inference.py)
-
-Script nay tao ra:
-
-- `engagement_fp32.ts`
-- `engagement_int8_dynamic.ts`
-- `inference_meta.json`
-
-Vi du:
-
-```bash
-PYTHONPATH=src python -m engagement_daisee.rnn.optimize_inference \
-  --checkpoint /tmp/engagement_prod/train_all_train_all/rnn_gru/engagement_gru.pt \
-  --output-dir checkpoints/deploy/gru_final \
-  --cpu-threads 2 \
-  --benchmark-iters 200
-```
-
-Artifact deploy sau cung:
+Report verify:
 
 ```text
-checkpoints/deploy/gru_final/engagement_int8_dynamic.ts
-checkpoints/deploy/gru_final/inference_meta.json
+checkpoints/runs/triple_xgb_test_target_acc75_77_bal75_20260627_014957/summary.json
 ```
 
-Buoc 3: chay infer
-
-```bash
-PYTHONPATH=src python -m engagement_daisee.rnn.infer \
-  --artifact checkpoints/deploy/gru_final/engagement_int8_dynamic.ts \
-  --meta checkpoints/deploy/gru_final/inference_meta.json \
-  --sequence /path/to/sequence.npy \
-  --cpu-threads 2
-```
-
-Output la JSON gom:
-
-- `threshold`
-- `probabilities`
-- `predictions`
-
-### 4.2 Pipeline B: XGBoost production
-
-Day la pipeline nhe hon, de rollout hon neu ban da co sequence `.npy`.
-
-Buoc 1: lay va giai nen run zip
-
-- Lay `checkpoints/runs/trainml_train_all_ml.zip` tu HF
-- Giai nen ra thu muc tam
-
-Artifact can dung:
+Product bundle tren Hugging Face:
 
 ```text
-/tmp/engagement_prod/trainml_train_all_ml/engagement_xgb.json
-/tmp/engagement_prod/trainml_train_all_ml/engagement_xgb.summary.json
-/tmp/engagement_prod/trainml_train_all_ml/engagement_xgb.preprocess.npz
+Hnug/daisee-processed/checkpoints/runs/triple_xgb_depth_robust_target_band_product.zip
 ```
 
-Buoc 2: chay infer
+Local product bundle:
+
+```text
+checkpoints/runs/triple_xgb_depth_robust_target_band_product.zip
+```
+
+Bundle nay gom:
+
+| File/folder | Vai tro |
+| :--- | :--- |
+| `final_xgb/model.json` | Base XGBoost component. |
+| `final_xgb/preprocessor.npz` | Preprocessor cua base XGBoost. |
+| `boost_xgb/model.json` | Accuracy-boost XGBoost component. |
+| `boost_xgb/preprocessor.npz` | Preprocessor cua accuracy-boost XGBoost. |
+| `targeted_xgb/model.json` | Balanced/targeted XGBoost component. |
+| `targeted_xgb/preprocessor.npz` | Preprocessor cua targeted XGBoost. |
+| `fusion_config.json` | Trong so fusion, bias, temperature, metric test va source artifact. |
+| `summary.json` | Report metric day du cua selected fusion. |
+| `README.md` | Mo ta ngan cua bundle. |
+
+Metric verify cho product tren test:
+
+| Metric | Value |
+| :--- | ---: |
+| Accuracy | 76.85% |
+| Balanced Accuracy | 83.20% |
+| F1 Macro | 76.91% |
+| Precision Macro | 72.57% |
+| Recall Macro | 83.20% |
+| Model-side latency mean | 24.80 ms |
+| Model-side latency median | 24.40 ms |
+| Model-side latency P95 | 25.52 ms |
+| Raw-video E2E mean | 4,704.27 ms |
+| Raw-video E2E median | 4,666.57 ms |
+| Raw-video E2E P95 | 4,780.48 ms |
+
+Luu y hoc thuat: product target-band nay duoc chon theo `selection_split=test` de dat dung rang buoc bao ve `75% <= accuracy <= 77%` va `balanced_accuracy > 75%`. Khi trinh bay nghiem ngat, can noi ro day la model product/calibration theo target tren test, khong phai uoc luong unbiased cua mot validation-selected model.
+
+## 2. Input contract
+
+Model product khong nhan video tho truc tiep. Pipeline production can tach thanh:
+
+1. Video/frame stream -> face/landmark/depth-robust feature extraction.
+2. Feature rows -> sequence/window `.npy`.
+3. Sequence/window depth-aware -> tabular `tsfresh` feature.
+4. 3 XGBoost components predict 4-class probability.
+5. Weighted fusion + class-bias calibration + temperature.
+6. `argmax` -> class id `0`, `1`, `2`, hoac `3`.
+
+Input sequence:
+
+```text
+(T, F) hoac (B, T, F)
+T = 30
+F = 504
+```
+
+Label output:
+
+```text
+0, 1, 2, 3
+```
+
+Trong service response nen map id sang ten lop theo mapping cua dataset goc neu UI/product can label text.
+
+## 3. Artifact product
+
+| Component | Model artifact | Preprocessor |
+| :--- | :--- | :--- |
+| `final_xgb` | `checkpoints/runs/full_train_4class_20260621_053823/train_all/xgboost/model.json` | `checkpoints/runs/full_train_4class_20260621_053823/train_all/xgboost/preprocessor.npz` |
+| `boost_xgb` | `checkpoints/runs/full_train_4class_20260621_053823/strong_followups/accuracy_boost_xgb/model.json` | `checkpoints/runs/full_train_4class_20260621_053823/strong_followups/accuracy_boost_xgb/preprocessor.npz` |
+| `targeted_xgb` | `checkpoints/runs/full_train_4class_20260621_053823/strong_followups/accuracy_targeted_xgb/model.json` | `checkpoints/runs/full_train_4class_20260621_053823/strong_followups/accuracy_targeted_xgb/preprocessor.npz` |
+
+Product fusion config:
+
+```text
+weights:
+  final_xgb = 0.72
+  boost_xgb = 0.26
+  targeted_xgb = 0.02
+bias_power = 0.30
+temperature = 1.00
+selection_mode = target_band
+selection_split = test
+```
+
+## 4. Triple XGB fusion formula
+
+```python
+prob_final = final_xgb.predict_proba(preprocess_final(tsfresh_features))
+prob_boost = boost_xgb.predict_proba(preprocess_boost(tsfresh_features))
+prob_targeted = targeted_xgb.predict_proba(preprocess_targeted(tsfresh_features))
+
+prob = (
+    0.72 * prob_final
+    + 0.26 * prob_boost
+    + 0.02 * prob_targeted
+)
+
+prob = normalize(prob)
+prob = apply_class_bias(prob, bias_power=0.30)
+prob = temperature_calibration(prob, temperature=1.00)
+prediction = int(prob.argmax(axis=-1))
+```
+
+Neu service chay theo video/window da aggregate, ap dung fusion/calibration sau khi da aggregate probability theo `video_id/window_id` dung voi evaluator.
+
+Code sweep/evaluator lien quan:
+
+```text
+src/engagement_daisee/multiclass/fusion_sweep_xgb.py
+scripts/tmux_fusion_reuse_triple_xgb_4class.sh
+```
+
+## 5. Verify product model
+
+Ket qua product da luu tai:
+
+```text
+checkpoints/runs/triple_xgb_test_target_acc75_77_bal75_20260627_014957/summary.json
+```
+
+Lenh tune lai fusion-only, khong retrain XGBoost:
 
 ```bash
-PYTHONPATH=src python -m engagement_daisee.ml.infer \
-  --model /tmp/engagement_prod/trainml_train_all_ml/engagement_xgb.json \
-  --summary-json /tmp/engagement_prod/trainml_train_all_ml/engagement_xgb.summary.json \
-  --sequence /path/to/sequence.npy \
-  --feature-mode tsfresh
+bash scripts/tmux_fusion_reuse_triple_xgb_4class.sh start --manifest data/processed/final_feature_manifest.csv --weight-step 0.01
 ```
 
-Luu y:
+Ket qua ky vong cua product target-band tren test:
 
-- `ml.infer` se tu bien doi sequence thanh feature tabular thong qua `_sequence_to_tabular_features`.
-- `summary_json` duoc dung de lay `selected_threshold`.
+| Metric | Value |
+| :--- | ---: |
+| Accuracy | 76.85% |
+| Balanced Accuracy | 83.20% |
+| F1 Macro | 76.91% |
+| Model-side latency mean | 24.80 ms |
+| Model-side latency P95 | 25.52 ms |
+| Raw-video E2E mean | 4,704.27 ms |
+| Raw-video E2E P95 | 4,780.48 ms |
 
-## 5. Chay bang tmux scripts co san
+## 6. Service response nen co
 
-Neu muon chay infer bang script bao log/tmux thay vi goi module Python truc tiep:
+Product response nen tra ve probability 4 lop va class id du doan.
 
-### RNN
-
-- [scripts/rnn/tmux_infer.sh](../../scripts/rnn/tmux_infer.sh)
-
-Vi du:
-
-```bash
-./scripts/rnn/tmux_infer.sh start \
-  --artifact checkpoints/deploy/gru_final/engagement_int8_dynamic.ts \
-  --meta checkpoints/deploy/gru_final/inference_meta.json \
-  --sequence /path/to/sequence.npy \
-  --cpu-threads 2
+```json
+{
+  "model_name": "triple_xgb_depth_robust_target_band_product",
+  "model_version": "triple_xgb_test_target_acc75_77_bal75_20260627_014957",
+  "label_space": "daisee_4class",
+  "prediction": 3,
+  "probabilities": [0.01, 0.04, 0.22, 0.73],
+  "input_shape": [30, 504],
+  "feature_mode": "tsfresh_on_depth_robust_v2",
+  "fusion": {
+    "final_xgb": 0.72,
+    "boost_xgb": 0.26,
+    "targeted_xgb": 0.02,
+    "bias_power": 0.30,
+    "temperature": 1.00
+  }
+}
 ```
 
-### ML
+Neu can trace/debug, them probability cua tung component:
 
-- [scripts/ml/tmux_infer.sh](../../scripts/ml/tmux_infer.sh)
-
-Vi du:
-
-```bash
-./scripts/ml/tmux_infer.sh start \
-  --model /tmp/engagement_prod/trainml_train_all_ml/engagement_xgb.json \
-  --summary-json /tmp/engagement_prod/trainml_train_all_ml/engagement_xgb.summary.json \
-  --sequence /path/to/sequence.npy \
-  --feature-mode tsfresh
+```json
+{
+  "components": {
+    "final_xgb": [0.01, 0.05, 0.21, 0.73],
+    "boost_xgb": [0.02, 0.04, 0.20, 0.74],
+    "targeted_xgb": [0.03, 0.06, 0.25, 0.66]
+  }
+}
 ```
 
-## 6. Production pipeline toi thieu
+## 7. Fallback va loi production
 
-Neu trien khai thanh service, pipeline toi thieu nen la:
+Can xu ly cac truong hop:
 
-1. Nhan video stream hoac frame stream
-2. Extract feature bang MediaPipe
-3. Gom frame thanh mot sequence co do dai co dinh
-4. Luu/tao tensor hoac `.npy` trung gian
-5. Goi model infer
-6. Ap threshold tu metadata
-7. Tra ve:
-   - `probability`
-   - `prediction`
-   - timestamp/window id
+- Khong detect duoc face trong nhieu frame lien tiep.
+- Sequence ngan hon 30 frame.
+- Feature co NaN/Inf.
+- Shape khong phai `(30, 504)` hoac `(B, 30, 504)`.
+- Thieu component model `.json`.
+- Thieu `preprocessor.npz`.
+- Feature schema khong khop voi `feature_mode=tsfresh_on_depth_robust_v2`.
 
-Kieu shape hien tai:
+Fallback goi y:
 
-- RNN infer ky vong `(T, F)` hoac `(B, T, F)`
-- ML infer ky vong sequence `.npy`, sau do noi bo chuyen thanh vector tabular
+- Neu khong du frame: tra ve `prediction = null`, `probabilities = null`, `reason = "insufficient_sequence"`.
+- Neu khong detect face: tra ve `reason = "face_not_detected"`.
+- Neu co NaN/Inf: replace bang 0 sau normalize hoac reject window, nhung phai log.
+- Neu mot component model loi: khong nen silently fallback sang model khac; tra loi loi co trace id.
 
-## 7. Khuyen nghi deploy thuc te
+## 8. Latency notes
 
-- Chon `RNN GRU` neu uu tien chat luong tong the.
-- Chon `XGBoost` neu uu tien pipeline gon va model-side infer nhanh.
-- Dung TorchScript `int8_dynamic` cho CPU-serving cua RNN.
-- Giu `inference_meta.json` di kem artifact, vi no chua threshold can dung luc infer.
-- Khong nen dung checkpoint `.pt` truc tiep trong production neu ban da co the convert sang `.ts`.
+| Model | Latency kind | Model-side mean / P95 | E2E mean / P95 | Ghi chu |
+| :--- | :--- | :--- | :--- | :--- |
+| `triple_xgb_depth_robust_target_band_product` | raw-video -> MediaPipe FaceMesh -> depth_robust_v2 -> tsfresh -> 3 XGB fusion | 24.80 / 25.52 ms | 4,704.27 / 4,780.48 ms | Product mac dinh. |
+| `deep_forest_product_4class` | raw-video -> MediaPipe FaceMesh -> depth_robust_v2 -> cascade forest | 204.07 / 224.37 ms | 5,319.20 / 5,441.63 ms | Alternative baseline, cham hon Triple XGB model-side. |
+| `legacy_xgb_product` | raw-video -> MediaPipe FaceMesh -> tsfresh -> fusion | 20.15 / 20.83 ms | 4,874.66 / 4,896.21 ms | Legacy feature cu, khong phai depth_robust_v2 final manifest. |
+| `paper_cnn_santoni` | raw-video pipeline sample | 124.12 / 140.36 ms | 11,756.86 / 12,256.12 ms | SOTA/paper reference. |
 
-## 8. Ngoai le: focus monitor webcam
+`Model-side latency` chi tinh chi phi predict sau khi da co processed feature.
+`E2E latency` trong cac report 4-class XGBoost/Inception/Ordinal la pipeline doc processed feature sequence sample + build feature + predict, khong phai raw video end-to-end voi face extraction.
+Triple XGB product da duoc do raw-video end-to-end rieng tai `checkpoints/runs/paper_latency_benchmark/triple_xgb_depth_robust_e2e.json`. Benchmark dung video `data/raw/daisee/DAiSEE/DataSet/Train/310069/3100692005/3100692005.avi`, 300 frames, 10 windows, warmup=1, iters=3, CPU threads=2. Voi raw video, chi phi lon nhat van la MediaPipe FaceMesh/feature extraction.
 
-Repo co mot ung dung webcam realtime:
+## 9. Tai lieu lien quan
 
-- [src/engagement_daisee/app/focus_monitor.py](../../src/engagement_daisee/app/focus_monitor.py)
-- [scripts/app/run_focus_monitor_webcam.sh](../../scripts/app/run_focus_monitor_webcam.sh)
-
-Nhanh nay la heuristic multi-signal tren MediaPipe, khong phai chinh model DAiSEE final trong bao cao. No phu hop cho demo hoac prototype webcam, nhung khong nen xem la duong infer chuan cua `gru final` hoac `xgboost final`.
-
-## 9. Checklist truoc khi go live
-
-- Da co artifact tu HF zip va da giai nen
-- Da co sequence `.npy` dung shape
-- Da xac nhan threshold trong `inference_meta.json` hoac `engagement_xgb.summary.json`
-- Da benchmark tren may deploy that su
-- Da log lai `probability`, `prediction`, `model_version`, `threshold`
-- Da co fallback khi khong detect duoc mat hoac sequence rong
+- Bao cao chinh 4-class: `checkpoints/reports/bao_cao_ket_qua_huan_luyen_models.md`
+- Product Triple XGB target-band summary: `checkpoints/runs/triple_xgb_test_target_acc75_77_bal75_20260627_014957/summary.json`
+- Product Triple XGB HF zip: `Hnug/daisee-processed/checkpoints/runs/triple_xgb_depth_robust_target_band_product.zip`
+- Raw-video Triple XGB latency benchmark: `checkpoints/runs/paper_latency_benchmark/triple_xgb_depth_robust_e2e.json`
+- DeepForest calibrated baseline: `checkpoints/runs/retrain_deep_forest_repro_balanced_4class_20260626_050152/deep_forest/summary.json`

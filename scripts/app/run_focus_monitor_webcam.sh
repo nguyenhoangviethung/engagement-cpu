@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-WORKDIR="/home/bear/engagement-cpu"
+WORKDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../.."
 ENV_NAME="thesis"
 
 CAMERA_ID="${CAMERA_ID:-0}"

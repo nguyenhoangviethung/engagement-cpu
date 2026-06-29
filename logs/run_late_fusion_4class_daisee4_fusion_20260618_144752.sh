@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd /home/bear/engagement-cpu/scripts/..
+ln -sfn /home/bear/engagement-cpu/scripts/../logs/late_fusion_4class_daisee4_fusion_20260618_144752.log /home/bear/engagement-cpu/scripts/../logs/latest_late_fusion_4class.log
+echo "=== 4-class late-fusion tmux started at $(date) ===" | tee -a /home/bear/engagement-cpu/scripts/../logs/late_fusion_4class_daisee4_fusion_20260618_144752.log
+WORKDIR=/home/bear/engagement-cpu/scripts/.. CONDA_ENV=thesis MANIFEST=/home/bear/engagement-cpu/scripts/../data/processed/runs/daisee_4class_final_dataset/feature_manifest.csv RUN_ROOT=/home/bear/engagement-cpu/scripts/../checkpoints/runs/train_all_4class_gpu_final RUN_LOG=/home/bear/engagement-cpu/scripts/../logs/late_fusion_4class_daisee4_fusion_20260618_144752.log REPORT_JSON=/home/bear/engagement-cpu/scripts/../checkpoints/runs/train_all_4class_gpu_final/late_fusion_4class_daisee4_fusion_20260618_144752/summary.json REPORT_CSV=/home/bear/engagement-cpu/scripts/../checkpoints/runs/train_all_4class_gpu_final/late_fusion_4class_daisee4_fusion_20260618_144752/summary.csv LATEST_LOG_LINK=/home/bear/engagement-cpu/scripts/../logs/latest_late_fusion_4class.log BATCH_SIZE=128 FEATURE_MODE=tsfresh WEIGHT_STEP=0.05 OBJECTIVE=balanced_accuracy POLL_SECONDS=120 LATENCY_THREADS=2 LATENCY_WARMUP=30 LATENCY_ITERS=200 bash /home/bear/engagement-cpu/scripts/../scripts/late_fusion_4class_runner.sh
+echo "=== 4-class late-fusion tmux finished at $(date) ===" | tee -a /home/bear/engagement-cpu/scripts/../logs/late_fusion_4class_daisee4_fusion_20260618_144752.log
+ln -sfn /home/bear/engagement-cpu/scripts/../logs/late_fusion_4class_daisee4_fusion_20260618_144752.log /home/bear/engagement-cpu/scripts/../logs/latest_late_fusion_4class.log

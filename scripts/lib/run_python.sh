@@ -56,9 +56,37 @@ fi
 
 VENV_PY="$WORKDIR/.venv/bin/python"
 if [[ -x "$VENV_PY" ]]; then
+  # MediaPipe Tasks needs EGL/GLES. Rescue instances keep a private runtime in
+  # the user's home so execution does not depend on /mnt/rescue system paths.
+  LOCAL_MEDIAPIPE_LIB="$HOME/.local/lib/engagement-cpu"
+  USING_LOCAL_MEDIAPIPE_LIB=0
+  if [[ ! -e /usr/lib/x86_64-linux-gnu/libGLESv2.so.2 && -e "$LOCAL_MEDIAPIPE_LIB/libGLESv2.so.2" ]]; then
+    export LD_LIBRARY_PATH="$LOCAL_MEDIAPIPE_LIB"
+    USING_LOCAL_MEDIAPIPE_LIB=1
+  fi
+  # A mounted rescue filesystem may contain a venv created by an older Python
+  # than the rescue OS. Prefer the matching interpreter from /mnt/rescue when
+  # the venv's original major.minor runtime is available there.
+  VENV_SITE="$(find "$WORKDIR/.venv/lib" -maxdepth 1 -type d -name 'python[0-9]*.[0-9]*' -print -quit 2>/dev/null || true)"
+  if [[ -n "$VENV_SITE" ]]; then
+    VENV_VERSION="${VENV_SITE##*/python}"
+    RESCUE_PY="/mnt/rescue/usr/bin/python$VENV_VERSION"
+    ACTIVE_VERSION="$($VENV_PY -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")' 2>/dev/null || true)"
+    if [[ "$ACTIVE_VERSION" != "$VENV_VERSION" && -x "$RESCUE_PY" ]]; then
+      export VIRTUAL_ENV="$WORKDIR/.venv"
+      export PATH="$WORKDIR/.venv/bin:$PATH"
+      export PYTHONPATH="$VENV_SITE/site-packages${PYTHONPATH:+:$PYTHONPATH}"
+      if [[ "$1" == "python" ]]; then
+        shift
+        exec "$RESCUE_PY" "$@"
+      fi
+    fi
+  fi
   export PATH="$WORKDIR/.venv/bin:$PATH"
   # Avoid picking system CUDA/cuDNN first (can mismatch with PyTorch wheel bundled libs).
-  unset LD_LIBRARY_PATH || true
+  if [[ "$USING_LOCAL_MEDIAPIPE_LIB" -eq 0 ]]; then
+    unset LD_LIBRARY_PATH || true
+  fi
   if [[ "$1" == "python" ]]; then
     shift
     exec "$VENV_PY" "$@"

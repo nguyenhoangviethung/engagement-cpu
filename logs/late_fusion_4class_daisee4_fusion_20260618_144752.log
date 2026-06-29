@@ -1,0 +1,34 @@
+=== 4-class late-fusion tmux started at Thu Jun 18 14:47:52 UTC 2026 ===
+=== 4-class late-fusion stage started at Thu Jun 18 14:47:52 UTC 2026 ===
+manifest=/home/bear/engagement-cpu/scripts/../data/processed/runs/daisee_4class_final_dataset/feature_manifest.csv
+run_root=/home/bear/engagement-cpu/scripts/../checkpoints/runs/train_all_4class_gpu_final
+report_json=/home/bear/engagement-cpu/scripts/../checkpoints/runs/train_all_4class_gpu_final/late_fusion_4class_daisee4_fusion_20260618_144752/summary.json
+2026-06-18 14:48:02 | INFO | Waiting for base train_all summary: /home/bear/engagement-cpu/scripts/../checkpoints/runs/train_all_4class_gpu_final/train_all_summary.json
+/home/bear/engagement-cpu/src/engagement_daisee/multiclass/late_fusion.py:476: DtypeWarning: Columns (7) have mixed types. Specify dtype option on import or set low_memory=False.
+  manifest_df = normalize_manifest_columns(pd.read_csv(manifest_path))
+/home/bear/engagement-cpu/src/engagement_daisee/multiclass/late_fusion.py:288: DtypeWarning: Columns (7) have mixed types. Specify dtype option on import or set low_memory=False.
+  manifest_df = normalize_manifest_columns(pd.read_csv(manifest_path))
+/home/bear/engagement-cpu/src/engagement_daisee/rnn/dataset.py:16: DtypeWarning: Columns (7) have mixed types. Specify dtype option on import or set low_memory=False.
+  manifest = normalize_manifest_columns(pd.read_csv(self.manifest_csv))
+2026-06-18 14:51:03 | INFO | Loaded 5000/14290 feature rows
+2026-06-18 14:51:28 | INFO | Loaded 10000/14290 feature rows
+/home/bear/engagement-cpu/src/engagement_daisee/multiclass/late_fusion.py:288: DtypeWarning: Columns (7) have mixed types. Specify dtype option on import or set low_memory=False.
+  manifest_df = normalize_manifest_columns(pd.read_csv(manifest_path))
+/home/bear/engagement-cpu/src/engagement_daisee/rnn/dataset.py:16: DtypeWarning: Columns (7) have mixed types. Specify dtype option on import or set low_memory=False.
+  manifest = normalize_manifest_columns(pd.read_csv(self.manifest_csv))
+2026-06-18 14:54:27 | INFO | Loaded 5000/17986 feature rows
+2026-06-18 14:54:43 | INFO | Loaded 10000/17986 feature rows
+2026-06-18 14:54:58 | INFO | Loaded 15000/17986 feature rows
+/home/bear/engagement-cpu/src/engagement_daisee/multiclass/late_fusion.py:339: DtypeWarning: Columns (7) have mixed types. Specify dtype option on import or set low_memory=False.
+  manifest_df = normalize_manifest_columns(pd.read_csv(manifest_path))
+/home/bear/engagement-cpu/src/engagement_daisee/rnn/dataset.py:16: DtypeWarning: Columns (7) have mixed types. Specify dtype option on import or set low_memory=False.
+  manifest = normalize_manifest_columns(pd.read_csv(self.manifest_csv))
+/home/bear/engagement-cpu/src/engagement_daisee/rnn/dataset.py:16: DtypeWarning: Columns (7) have mixed types. Specify dtype option on import or set low_memory=False.
+  manifest = normalize_manifest_columns(pd.read_csv(self.manifest_csv))
+2026-06-18 15:00:40 | INFO | Loaded 5000/17986 feature rows
+2026-06-18 15:01:09 | INFO | Loaded 10000/17986 feature rows
+2026-06-18 15:01:40 | INFO | Loaded 15000/17986 feature rows
+2026-06-18 15:03:07 | INFO | [late_fusion] test video metrics acc=0.5056 bal=0.4894 f1=0.4068 | model latency=53.979 ms | e2e=62.810 ms
+=== 4-class late-fusion stage finished at Thu Jun 18 15:03:11 UTC 2026 ===
+report_json=/home/bear/engagement-cpu/scripts/../checkpoints/runs/train_all_4class_gpu_final/late_fusion_4class_daisee4_fusion_20260618_144752/summary.json
+=== 4-class late-fusion tmux finished at Thu Jun 18 15:03:11 UTC 2026 ===

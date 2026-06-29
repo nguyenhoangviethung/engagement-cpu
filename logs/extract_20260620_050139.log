@@ -1,0 +1,18 @@
+=== Extract started at Sat Jun 20 05:01:39 UTC 2026 ===
+Run ID: depth_robust_20260620_050139
+Run features dir: /home/bear/engagement-cpu/data/processed/runs/extract_depth_robust_20260620_050139/features
+Run manifest: /home/bear/engagement-cpu/data/processed/runs/extract_depth_robust_20260620_050139/feature_manifest.csv
+2026-06-20 05:01:40 | INFO | Starting feature extraction
+2026-06-20 05:01:40 | INFO | Config | labels=/home/bear/engagement-cpu/data/processed/runs/daisee_4class_final_dataset/video_labels_4class.csv | videos=/mnt/rescue/home/bear/engagement-cpu/data/raw/daisee/DAiSEE/DataSet | features=/home/bear/engagement-cpu/data/processed/runs/extract_depth_robust_20260620_050139/features | manifest=/home/bear/engagement-cpu/data/processed/runs/extract_depth_robust_20260620_050139/feature_manifest.csv | sample=False | seed=42 | frame_stride=1 | max_frames=0 | resize_width=0 | feature_set=depth_robust | temporal_enrichment=velocity_std | label_mode=four_class | output_dim=300
+2026-06-20 05:01:42 | INFO | Loaded 7672 label rows after sampling
+2026-06-20 05:01:42 | INFO | Indexed 9068 unique videos from raw directory
+2026-06-20 05:01:42 | INFO | Processing 7672 videos
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+W0000 00:00:1781931702.458082    9358 face_landmarker_graph.cc:174] Sets FaceBlendshapesGraph acceleration to xnnpack by default.
+INFO: Created TensorFlow Lite XNNPACK delegate for CPU.
+W0000 00:00:1781931702.467952    9360 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+W0000 00:00:1781931702.497185    9365 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+2026-06-20 05:02:39 | INFO | Progress 10/7672 | saved_videos=10 | saved_sequences=100 | unresolved=0 | unreadable=0
+2026-06-20 05:03:37 | INFO | Progress 20/7672 | saved_videos=20 | saved_sequences=200 | unresolved=0 | unreadable=0
+2026-06-20 05:04:33 | INFO | Progress 30/7672 | saved_videos=30 | saved_sequences=300 | unresolved=0 | unreadable=0
+2026-06-20 05:05:30 | INFO | Progress 40/7672 | saved_videos=40 | saved_sequences=400 | unresolved=0 | unreadable=0

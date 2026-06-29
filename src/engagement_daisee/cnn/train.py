@@ -26,6 +26,7 @@ from engagement_daisee.common.config import (
     RANDOM_SEED,
     SAMPLE_EPOCHS,
 )
+from engagement_daisee.common.manifest import normalize_manifest_columns
 
 
 LOGGER = logging.getLogger("train_cnn")
@@ -149,6 +150,7 @@ def _resolve_manifest_path(manifest_csv: Path, run_id: str | None) -> Path:
 
 
 def _split_indices(manifest_df: pd.DataFrame) -> tuple[list[int], list[int], list[int]]:
+    manifest_df = normalize_manifest_columns(manifest_df)
     if "split" not in manifest_df.columns:
         raise ValueError("Manifest must include split column.")
     split_series = manifest_df["split"].astype(str).str.strip().str.lower()
@@ -304,7 +306,7 @@ def train_cnn(
         device = "cpu"
 
     manifest_csv = _resolve_manifest_path(manifest_csv, run_id)
-    manifest_df = pd.read_csv(manifest_csv)
+    manifest_df = normalize_manifest_columns(pd.read_csv(manifest_csv))
     train_indices, val_indices, test_indices = _split_indices(manifest_df)
 
     if sample:

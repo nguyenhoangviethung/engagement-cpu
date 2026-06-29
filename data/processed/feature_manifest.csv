@@ -1,4 +1,4 @@
-feature_path,video_id,video_path,label,split,segment_index,num_frames
+feature_path,video_id,video_path,label,partition,segment_index,num_frames
 /home/bear/Documents/Workspace/Thesis20252/Engagement_DAiSEE/data/processed/features/5100452049_seg0000.npy,5100452049.avi,/home/bear/Documents/Workspace/Thesis20252/Engagement_DAiSEE/data/raw/daisee/DAiSEE/DataSet/Test/510045/5100452049/5100452049.avi,1,test,0,300
 /home/bear/Documents/Workspace/Thesis20252/Engagement_DAiSEE/data/processed/features/5100452049_seg0001.npy,5100452049.avi,/home/bear/Documents/Workspace/Thesis20252/Engagement_DAiSEE/data/raw/daisee/DAiSEE/DataSet/Test/510045/5100452049/5100452049.avi,1,test,1,300
 /home/bear/Documents/Workspace/Thesis20252/Engagement_DAiSEE/data/processed/features/5100452049_seg0002.npy,5100452049.avi,/home/bear/Documents/Workspace/Thesis20252/Engagement_DAiSEE/data/raw/daisee/DAiSEE/DataSet/Test/510045/5100452049/5100452049.avi,1,test,2,300

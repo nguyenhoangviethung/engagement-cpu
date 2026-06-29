@@ -7,6 +7,7 @@ import torch
 from torch import nn
 from torch.utils.data import DataLoader, Subset
 
+from engagement_daisee.common.manifest import normalize_manifest_columns
 from engagement_daisee.cnn.dataset import DAiSEECNNFrameDataset
 from engagement_daisee.cnn.model import build_cnn_model
 from engagement_daisee.cnn.train import _build_transform, _compute_metrics, _run_epoch
@@ -16,6 +17,7 @@ DEFAULT_MANIFEST = Path("data/processed/cnn_frame_manifest.csv")
 
 
 def _split_indices(manifest: pd.DataFrame) -> tuple[list[int], list[int], list[int]]:
+    manifest = normalize_manifest_columns(manifest)
     if "split" not in manifest.columns:
         raise ValueError("Manifest must include split column.")
 
@@ -61,7 +63,7 @@ def run_eval(
 ) -> dict:
     if device == "cuda" and not torch.cuda.is_available():
         device = "cpu"
-    manifest_df = pd.read_csv(manifest_path)
+    manifest_df = normalize_manifest_columns(pd.read_csv(manifest_path))
     train_indices, val_indices, test_indices = _split_indices(manifest_df)
 
     split_name = split.strip().lower()

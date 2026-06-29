@@ -54,6 +54,13 @@ ENHANCED_LANDMARKS = [
 ]
 DENSE709_LANDMARK_COUNT = 229
 DENSE709_SCALAR_DIM = 22
+DEPTH_ROBUST_SCALAR_DIM = 25
+DEPTH_ROBUST_LANDMARK_CLIP = 10.0
+DEPTH_ROBUST_V2_SCALAR_DIM = 25
+DEPTH_ROBUST_V2_BLENDSHAPE_DIM = 52
+DEPTH_ROBUST_V2_TRANSFORM_DIM = 16
+DEPTH_ROBUST_V2_VALIDITY_INDEX = 24
+DEPTH_ROBUST_V2_CLIP = 100.0
 
 
 LOGGER = logging.getLogger("extract_features")
@@ -77,19 +84,42 @@ class _TaskFaceLandmarker:
 
         options = vision.FaceLandmarkerOptions(
             base_options=BaseOptions(model_asset_path=str(model_path)),
-            running_mode=VisionTaskRunningMode.IMAGE,
+            running_mode=VisionTaskRunningMode.VIDEO,
             num_faces=1,
             min_face_detection_confidence=0.5,
             min_face_presence_confidence=0.5,
             min_tracking_confidence=0.5,
+            output_face_blendshapes=True,
+            output_facial_transformation_matrixes=True,
         )
         self._detector = vision.FaceLandmarker.create_from_options(options)
+        self._timestamp_ms = 0
+        self._warm_start = True
+
+    def start_video(self) -> None:
+        self._warm_start = True
+
+    def _detect(self, image):
+        result = self._detector.detect_for_video(image, self._timestamp_ms)
+        self._timestamp_ms += 1
+        return result
 
     def process(self, rgb_frame):
         image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
-        result = self._detector.detect(image)
+        if self._warm_start:
+            self._detect(image)
+            self._warm_start = False
+        result = self._detect(image)
         faces = [_TaskLandmarkList(face) for face in result.face_landmarks]
-        return type("FaceMeshResult", (), {"multi_face_landmarks": faces})()
+        return type(
+            "FaceMeshResult",
+            (),
+            {
+                "multi_face_landmarks": faces,
+                "face_blendshapes": result.face_blendshapes,
+                "facial_transformation_matrixes": result.facial_transformation_matrixes,
+            },
+        )()
 
     def close(self) -> None:
         self._detector.close()
@@ -253,12 +283,274 @@ def _dense_landmark_indices(landmarks) -> np.ndarray:
     return np.linspace(0, landmark_count - 1, num=DENSE709_LANDMARK_COUNT, dtype=np.int64)
 
 
-def _build_frame_feature(landmarks, feature_set: str) -> np.ndarray:
+def _depth_robust_features(landmarks) -> np.ndarray:
+    """Build camera-distance-aware features in a canonical face coordinate system.
+
+    MediaPipe's x/y/z values are monocular and do not provide metric depth.  We
+    therefore expose inverse face-scale proxies to the model, while normalizing
+    landmark shape by inter-eye distance and in-plane roll.  This makes facial
+    shape substantially less sensitive to camera distance without discarding
+    the distance signal entirely.
+    """
+    geometry = _face_geometry_proxy(landmarks)
+    left_eye_center = (_lm_xy(landmarks, 33) + _lm_xy(landmarks, 133)) / 2.0
+    right_eye_center = (_lm_xy(landmarks, 362) + _lm_xy(landmarks, 263)) / 2.0
+    eye_center = (left_eye_center + right_eye_center) / 2.0
+    mouth_center = (_lm_xy(landmarks, 61) + _lm_xy(landmarks, 291)) / 2.0
+    nose_xy = _lm_xy(landmarks, 1)
+    nose_z = float(_lm_xyz(landmarks, 1)[2])
+
+    inter_eye = _distance(left_eye_center, right_eye_center) + 1e-6
+    forehead = _lm_xy(landmarks, 10)
+    chin = _lm_xy(landmarks, 152)
+    left_cheek = _lm_xy(landmarks, 234)
+    right_cheek = _lm_xy(landmarks, 454)
+    bbox_width = _distance(left_cheek, right_cheek) + 1e-6
+    bbox_height = _distance(forehead, chin) + 1e-6
+
+    selected_xyz = np.stack([_lm_xyz(landmarks, index) for index in ENHANCED_LANDMARKS], axis=0)
+    z_span = float(np.ptp(selected_xyz[:, 2]))
+    depth_proxies = [
+        inter_eye,
+        -math.log(inter_eye),
+        bbox_width,
+        bbox_height,
+        math.sqrt(bbox_width * bbox_height),
+        nose_z,
+        z_span,
+        bbox_width / bbox_height,
+    ]
+
+    # Rotate x/y by -roll, center on the eye midpoint and scale by inter-eye
+    # distance. z is relative to the nose and uses the same scale as x/y.
+    roll = float(geometry[2])
+    cos_roll = math.cos(roll)
+    sin_roll = math.sin(roll)
+    rotation = np.asarray([[cos_roll, sin_roll], [-sin_roll, cos_roll]], dtype=np.float32)
+    canonical: list[float] = []
+    for point in selected_xyz:
+        xy = rotation @ ((point[:2] - eye_center) / inter_eye)
+        relative_z = (float(point[2]) - nose_z) / inter_eye
+        canonical.extend([float(xy[0]), float(xy[1]), relative_z])
+
+    relational = []
+    face_width = float(geometry[3]) + 1e-6
+    face_height = float(geometry[4]) + 1e-6
+    relational.extend(((nose_xy - left_eye_center) / face_width).tolist())
+    relational.extend(((nose_xy - right_eye_center) / face_width).tolist())
+    relational.extend(((mouth_center - nose_xy) / face_height).tolist())
+
+    scalar_features = [
+        _eye_aspect_ratio(landmarks, LEFT_EYE),
+        _eye_aspect_ratio(landmarks, RIGHT_EYE),
+        _mouth_aspect_ratio(landmarks),
+        *geometry.tolist(),
+        *relational,
+        *depth_proxies,
+    ]
+    if len(scalar_features) != DEPTH_ROBUST_SCALAR_DIM:
+        raise RuntimeError(f"Unexpected depth-robust scalar dimension: {len(scalar_features)}")
+    result = np.asarray([*scalar_features, *canonical], dtype=np.float32)
+    return np.nan_to_num(
+        np.clip(result, -DEPTH_ROBUST_LANDMARK_CLIP, DEPTH_ROBUST_LANDMARK_CLIP),
+        nan=0.0,
+        posinf=DEPTH_ROBUST_LANDMARK_CLIP,
+        neginf=-DEPTH_ROBUST_LANDMARK_CLIP,
+    )
+
+
+def _lm_xy_aspect(landmarks, index: int, image_aspect_ratio: float) -> np.ndarray:
+    """Return x/y in image-height units so Euclidean geometry is isotropic."""
+    point = landmarks.landmark[index]
+    return np.asarray([point.x * image_aspect_ratio, point.y], dtype=np.float32)
+
+
+def _lm_xyz_aspect(landmarks, index: int, image_aspect_ratio: float) -> np.ndarray:
+    """Aspect-correct x/y and z, whose MediaPipe scale is approximately x."""
+    point = landmarks.landmark[index]
+    return np.asarray(
+        [point.x * image_aspect_ratio, point.y, point.z * image_aspect_ratio],
+        dtype=np.float32,
+    )
+
+
+def _eye_aspect_ratio_corrected(landmarks, indices: list[int], image_aspect_ratio: float) -> float:
+    points = [_lm_xy_aspect(landmarks, index, image_aspect_ratio) for index in indices]
+    vertical = _distance(points[1], points[5]) + _distance(points[2], points[4])
+    horizontal = 2.0 * _distance(points[0], points[3]) + 1e-6
+    return vertical / horizontal
+
+
+def _mouth_aspect_ratio_corrected(landmarks, image_aspect_ratio: float) -> float:
+    top = _lm_xy_aspect(landmarks, 13, image_aspect_ratio)
+    bottom = _lm_xy_aspect(landmarks, 14, image_aspect_ratio)
+    left = _lm_xy_aspect(landmarks, 61, image_aspect_ratio)
+    right = _lm_xy_aspect(landmarks, 291, image_aspect_ratio)
+    return _distance(top, bottom) / (_distance(left, right) + 1e-6)
+
+
+def _iris_diameter(landmarks, indices: tuple[int, int, int, int], image_aspect_ratio: float) -> float:
+    if len(landmarks.landmark) <= max(indices):
+        return 0.0
+    horizontal = _distance(
+        _lm_xy_aspect(landmarks, indices[0], image_aspect_ratio),
+        _lm_xy_aspect(landmarks, indices[1], image_aspect_ratio),
+    )
+    vertical = _distance(
+        _lm_xy_aspect(landmarks, indices[2], image_aspect_ratio),
+        _lm_xy_aspect(landmarks, indices[3], image_aspect_ratio),
+    )
+    return 0.5 * (horizontal + vertical)
+
+
+def _blendshape_vector(face_blendshapes) -> np.ndarray:
+    if not face_blendshapes:
+        return np.zeros(DEPTH_ROBUST_V2_BLENDSHAPE_DIM, dtype=np.float32)
+    categories = face_blendshapes[0] if isinstance(face_blendshapes, list) else face_blendshapes
+    ordered = sorted(categories, key=lambda category: str(getattr(category, "category_name", "")))
+    scores = [float(getattr(category, "score", 0.0)) for category in ordered]
+    scores = (scores + [0.0] * DEPTH_ROBUST_V2_BLENDSHAPE_DIM)[:DEPTH_ROBUST_V2_BLENDSHAPE_DIM]
+    return np.asarray(scores, dtype=np.float32)
+
+
+def _transformation_vector(facial_transformation_matrixes) -> np.ndarray:
+    if not facial_transformation_matrixes:
+        return np.zeros(DEPTH_ROBUST_V2_TRANSFORM_DIM, dtype=np.float32)
+    values = np.asarray(facial_transformation_matrixes[0], dtype=np.float32).reshape(-1)
+    result = np.zeros(DEPTH_ROBUST_V2_TRANSFORM_DIM, dtype=np.float32)
+    result[: min(len(values), len(result))] = values[: len(result)]
+    return result
+
+
+def _depth_robust_v2_features(
+    landmarks,
+    image_aspect_ratio: float,
+    face_blendshapes=None,
+    facial_transformation_matrixes=None,
+) -> np.ndarray:
+    """Distance-aware, aspect-correct and canonically aligned face features."""
+    aspect_ratio = max(float(image_aspect_ratio), 1e-6)
+    left_eye_center = (
+        _lm_xy_aspect(landmarks, 33, aspect_ratio) + _lm_xy_aspect(landmarks, 133, aspect_ratio)
+    ) / 2.0
+    right_eye_center = (
+        _lm_xy_aspect(landmarks, 362, aspect_ratio) + _lm_xy_aspect(landmarks, 263, aspect_ratio)
+    ) / 2.0
+    eye_center = (left_eye_center + right_eye_center) / 2.0
+    left_mouth = _lm_xy_aspect(landmarks, 61, aspect_ratio)
+    right_mouth = _lm_xy_aspect(landmarks, 291, aspect_ratio)
+    mouth_center = (left_mouth + right_mouth) / 2.0
+    nose = _lm_xy_aspect(landmarks, 1, aspect_ratio)
+    forehead = _lm_xy_aspect(landmarks, 10, aspect_ratio)
+    chin = _lm_xy_aspect(landmarks, 152, aspect_ratio)
+    left_cheek = _lm_xy_aspect(landmarks, 234, aspect_ratio)
+    right_cheek = _lm_xy_aspect(landmarks, 454, aspect_ratio)
+
+    inter_eye = _distance(left_eye_center, right_eye_center) + 1e-6
+    face_width = _distance(left_cheek, right_cheek) + 1e-6
+    face_height = _distance(forehead, chin) + 1e-6
+    roll = math.atan2(
+        float(right_eye_center[1] - left_eye_center[1]),
+        float(right_eye_center[0] - left_eye_center[0]) + 1e-6,
+    )
+    yaw = float((nose[0] - eye_center[0]) / inter_eye)
+    pitch = float((nose[1] - mouth_center[1]) / face_height)
+
+    selected_xyz = np.stack(
+        [_lm_xyz_aspect(landmarks, index, aspect_ratio) for index in ENHANCED_LANDMARKS], axis=0
+    )
+    nose_z = float(_lm_xyz_aspect(landmarks, 1, aspect_ratio)[2])
+    raw_z_span = float(np.ptp(selected_xyz[:, 2]))
+    normalized_z_span = raw_z_span / inter_eye
+
+    left_iris = _iris_diameter(landmarks, (469, 471, 470, 472), aspect_ratio)
+    right_iris = _iris_diameter(landmarks, (474, 476, 475, 477), aspect_ratio)
+    valid_irises = [diameter for diameter in (left_iris, right_iris) if diameter > 1e-6]
+    mean_iris = float(np.mean(valid_irises)) if valid_irises else 0.0
+    log_inverse_iris = -math.log(mean_iris + 1e-6) if mean_iris > 0.0 else 0.0
+
+    relational = [
+        (nose[0] - left_eye_center[0]) / face_width,
+        (nose[1] - left_eye_center[1]) / face_height,
+        (nose[0] - right_eye_center[0]) / face_width,
+        (nose[1] - right_eye_center[1]) / face_height,
+        (mouth_center[0] - nose[0]) / face_width,
+        (mouth_center[1] - nose[1]) / face_height,
+    ]
+    scalar_features = np.asarray(
+        [
+            _eye_aspect_ratio_corrected(landmarks, LEFT_EYE, aspect_ratio),
+            _eye_aspect_ratio_corrected(landmarks, RIGHT_EYE, aspect_ratio),
+            _mouth_aspect_ratio_corrected(landmarks, aspect_ratio),
+            pitch,
+            yaw,
+            roll,
+            face_width,
+            face_height,
+            inter_eye,
+            -math.log(inter_eye),
+            math.sqrt(face_width * face_height),
+            face_width / face_height,
+            normalized_z_span,
+            raw_z_span,
+            left_iris,
+            right_iris,
+            mean_iris,
+            log_inverse_iris,
+            *relational,
+            1.0,
+        ],
+        dtype=np.float32,
+    )
+    if len(scalar_features) != DEPTH_ROBUST_V2_SCALAR_DIM:
+        raise RuntimeError(f"Unexpected depth-robust-v2 scalar dimension: {len(scalar_features)}")
+
+    cos_roll = math.cos(roll)
+    sin_roll = math.sin(roll)
+    rotation = np.asarray([[cos_roll, sin_roll], [-sin_roll, cos_roll]], dtype=np.float32)
+    canonical: list[float] = []
+    for point in selected_xyz:
+        xy = rotation @ ((point[:2] - eye_center) / inter_eye)
+        relative_z = (float(point[2]) - nose_z) / inter_eye
+        canonical.extend([float(xy[0]), float(xy[1]), relative_z])
+
+    result = np.concatenate(
+        [
+            scalar_features,
+            np.asarray(canonical, dtype=np.float32),
+            _blendshape_vector(face_blendshapes),
+            _transformation_vector(facial_transformation_matrixes),
+        ]
+    )
+    return np.nan_to_num(
+        np.clip(result, -DEPTH_ROBUST_V2_CLIP, DEPTH_ROBUST_V2_CLIP),
+        nan=0.0,
+        posinf=DEPTH_ROBUST_V2_CLIP,
+        neginf=-DEPTH_ROBUST_V2_CLIP,
+    ).astype(np.float32, copy=False)
+
+
+def _build_frame_feature(
+    landmarks,
+    feature_set: str,
+    image_aspect_ratio: float = 1.0,
+    face_blendshapes=None,
+    facial_transformation_matrixes=None,
+) -> np.ndarray:
     if feature_set == "dense709":
         features = _dense_scalar_features(landmarks).tolist()
         for landmark_index in _dense_landmark_indices(landmarks):
             features.extend(_lm_xyz(landmarks, int(landmark_index)).tolist())
         return np.asarray(features, dtype=np.float32)
+    if feature_set == "depth_robust":
+        return _depth_robust_features(landmarks)
+    if feature_set == "depth_robust_v2":
+        return _depth_robust_v2_features(
+            landmarks,
+            image_aspect_ratio=image_aspect_ratio,
+            face_blendshapes=face_blendshapes,
+            facial_transformation_matrixes=facial_transformation_matrixes,
+        )
 
     features = [
         _eye_aspect_ratio(landmarks, LEFT_EYE),
@@ -296,11 +588,60 @@ def _frame_feature_dim(feature_set: str) -> int:
         return 3 + 8 + 6 + len(ENHANCED_LANDMARKS) * 3
     if feature_set == "dense709":
         return DENSE709_SCALAR_DIM + DENSE709_LANDMARK_COUNT * 3
+    if feature_set == "depth_robust":
+        return DEPTH_ROBUST_SCALAR_DIM + len(ENHANCED_LANDMARKS) * 3
+    if feature_set == "depth_robust_v2":
+        return (
+            DEPTH_ROBUST_V2_SCALAR_DIM
+            + len(ENHANCED_LANDMARKS) * 3
+            + DEPTH_ROBUST_V2_BLENDSHAPE_DIM
+            + DEPTH_ROBUST_V2_TRANSFORM_DIM
+        )
     raise ValueError(f"Unsupported feature_set: {feature_set}")
 
 
 def _empty_feature(feature_set: str) -> np.ndarray:
     return np.zeros(_frame_feature_dim(feature_set), dtype=np.float32)
+
+
+def _interpolate_missing_v2(sequence: list[np.ndarray | None]) -> list[np.ndarray]:
+    """Interpolate missing detections while retaining a zero validity mask."""
+    if not sequence:
+        return []
+    valid_indices = [index for index, value in enumerate(sequence) if value is not None]
+    if not valid_indices:
+        return [_empty_feature("depth_robust_v2") for _ in sequence]
+
+    output: list[np.ndarray | None] = [None] * len(sequence)
+    for index in valid_indices:
+        output[index] = np.asarray(sequence[index], dtype=np.float32).copy()
+
+    first_valid = valid_indices[0]
+    last_valid = valid_indices[-1]
+    for index in range(first_valid):
+        output[index] = output[first_valid].copy()
+    for index in range(last_valid + 1, len(output)):
+        output[index] = output[last_valid].copy()
+
+    for left_index, right_index in zip(valid_indices[:-1], valid_indices[1:]):
+        gap = right_index - left_index
+        if gap <= 1:
+            continue
+        left_value = output[left_index]
+        right_value = output[right_index]
+        for offset in range(1, gap):
+            alpha = offset / gap
+            output[left_index + offset] = ((1.0 - alpha) * left_value + alpha * right_value).astype(np.float32)
+
+    valid_set = set(valid_indices)
+    final: list[np.ndarray] = []
+    for index, value in enumerate(output):
+        if value is None:
+            value = _empty_feature("depth_robust_v2")
+        if index not in valid_set:
+            value[DEPTH_ROBUST_V2_VALIDITY_INDEX] = 0.0
+        final.append(value)
+    return final
 
 
 def _pad_sequence(sequence: list[np.ndarray], feature_set: str) -> np.ndarray:
@@ -349,6 +690,30 @@ def _collect_video_records(labels_csv: Path) -> pd.DataFrame:
     if "video_id" not in labels_df.columns:
         raise ValueError("The processed labels CSV must contain a video_id column.")
     return labels_df
+
+
+def _resolve_label_column(labels_df: pd.DataFrame, label_mode: str) -> tuple[str, int]:
+    if label_mode == "four_class":
+        label_column, num_classes = "engagement_raw", 4
+    elif label_mode == "binary":
+        label_column, num_classes = "engagement_binary", 2
+    else:
+        raise ValueError(f"Unsupported label_mode: {label_mode}")
+
+    if label_column not in labels_df.columns:
+        raise ValueError(
+            f"Label mode '{label_mode}' requires column '{label_column}' in the labels CSV. "
+            f"Available columns: {sorted(labels_df.columns)}"
+        )
+    numeric_labels = pd.to_numeric(labels_df[label_column], errors="coerce")
+    invalid = numeric_labels.isna() | (numeric_labels % 1 != 0) | ~numeric_labels.between(0, num_classes - 1)
+    if invalid.any():
+        invalid_values = labels_df.loc[invalid, label_column].head(10).tolist()
+        raise ValueError(
+            f"Column '{label_column}' contains labels outside 0..{num_classes - 1}: {invalid_values}"
+        )
+    labels_df[label_column] = numeric_labels.astype(int)
+    return label_column, num_classes
 
 
 def _build_video_index(raw_video_dir: Path) -> dict[str, Path]:
@@ -404,7 +769,7 @@ def _extract_video_features(
     feature_set: str = "base",
     face_mesh=None,
 ) -> list[np.ndarray]:
-    frame_features: list[np.ndarray] = []
+    frame_features: list[np.ndarray | None] = []
     capture = cv2.VideoCapture(str(video_path))
     if not capture.isOpened():
         return frame_features
@@ -419,6 +784,9 @@ def _extract_video_features(
     if face_mesh is None:
         face_mesh = _create_face_landmarker()
         close_face_mesh = True
+    start_video = getattr(face_mesh, "start_video", None)
+    if callable(start_video):
+        start_video()
     try:
         frame_index = 0
         while True:
@@ -432,16 +800,28 @@ def _extract_video_features(
             rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             results = face_mesh.process(rgb_frame)
             if results.multi_face_landmarks:
-                frame_features.append(_build_frame_feature(results.multi_face_landmarks[0], feature_set=feature_set))
+                frame_features.append(
+                    _build_frame_feature(
+                        results.multi_face_landmarks[0],
+                        feature_set=feature_set,
+                        image_aspect_ratio=frame.shape[1] / max(1.0, float(frame.shape[0])),
+                        face_blendshapes=getattr(results, "face_blendshapes", None),
+                        facial_transformation_matrixes=getattr(
+                            results, "facial_transformation_matrixes", None
+                        ),
+                    )
+                )
             else:
-                frame_features.append(_empty_feature(feature_set=feature_set))
+                frame_features.append(None if feature_set == "depth_robust_v2" else _empty_feature(feature_set))
             frame_index += 1
     finally:
         capture.release()
         if close_face_mesh:
             face_mesh.close()
 
-    return frame_features
+    if feature_set == "depth_robust_v2":
+        return _interpolate_missing_v2(frame_features)
+    return [feature for feature in frame_features if feature is not None]
 
 
 def _choose_rows(labels_df: pd.DataFrame, sample: bool, seed: int) -> pd.DataFrame:
@@ -486,11 +866,15 @@ def extract_features(
     resize_width: int = 0,
     feature_set: str = "base",
     temporal_enrichment: str = "velocity_std",
+    label_mode: str = "four_class",
+    num_shards: int = 1,
+    shard_index: int = 0,
+    storage_dtype: str = "float32",
 ) -> Path:
     start_time = time.time()
     LOGGER.info("Starting feature extraction")
     LOGGER.info(
-        "Config | labels=%s | videos=%s | features=%s | manifest=%s | sample=%s | seed=%d | frame_stride=%d | max_frames=%d | resize_width=%d | feature_set=%s | temporal_enrichment=%s | output_dim=%d",
+        "Config | labels=%s | videos=%s | features=%s | manifest=%s | sample=%s | seed=%d | frame_stride=%d | max_frames=%d | resize_width=%d | feature_set=%s | temporal_enrichment=%s | label_mode=%s | shard=%d/%d | output_dim=%d | storage_dtype=%s",
         processed_labels_csv,
         raw_video_dir,
         features_dir,
@@ -502,14 +886,35 @@ def extract_features(
         resize_width,
         feature_set,
         temporal_enrichment,
+        label_mode,
+        shard_index,
+        num_shards,
         _frame_feature_dim(feature_set) * (1 if temporal_enrichment == "none" else 3),
+        storage_dtype,
     )
 
+    if num_shards < 1:
+        raise ValueError(f"num_shards must be >= 1, got {num_shards}")
+    if not 0 <= shard_index < num_shards:
+        raise ValueError(f"shard_index must be in [0, {num_shards}), got {shard_index}")
+    if storage_dtype not in {"float16", "float32"}:
+        raise ValueError(f"storage_dtype must be float16 or float32, got {storage_dtype}")
+    output_dtype = np.float16 if storage_dtype == "float16" else np.float32
+
     labels_df = _collect_video_records(processed_labels_csv)
+    label_column, num_classes = _resolve_label_column(labels_df, label_mode=label_mode)
     labels_df = _choose_rows(labels_df, sample=sample, seed=seed)
+    total_label_rows = len(labels_df)
+    labels_df = labels_df.iloc[shard_index::num_shards].reset_index(drop=True)
     video_index = _build_video_index(raw_video_dir)
 
-    LOGGER.info("Loaded %d label rows after sampling", len(labels_df))
+    LOGGER.info(
+        "Loaded shard %d/%d | rows=%d of total=%d",
+        shard_index,
+        num_shards,
+        len(labels_df),
+        total_label_rows,
+    )
     LOGGER.info("Indexed %d unique videos from raw directory", len(video_index))
 
     features_dir.mkdir(parents=True, exist_ok=True)
@@ -560,15 +965,20 @@ def extract_features(
             saved_videos += 1
             for segment_index, sequence in enumerate(sequences):
                 sequence_file = features_dir / f"{Path(video_id).stem}_seg{segment_index:04d}.npy"
-                np.save(sequence_file, sequence.astype(np.float32))
+                np.save(sequence_file, sequence.astype(output_dtype))
                 saved_sequences += 1
                 manifest_rows.append(
                     {
                         "feature_path": str(sequence_file),
                         "video_id": video_id,
                         "video_path": str(video_path),
-                        "label": int(row["engagement_binary"]),
-                        "split": str(row.get("split", "unknown")).lower(),
+                        "label": int(row[label_column]),
+                        "label_mode": label_mode,
+                        "label_source_column": label_column,
+                        "num_classes": num_classes,
+                        "split": str(
+                            row.get("split", row.get("official_split", row.get("partition", "unknown")))
+                        ).lower(),
                         "segment_index": segment_index,
                         "num_frames": int(len(raw_features)),
                         "frame_stride": int(max(1, frame_stride)),
@@ -577,6 +987,9 @@ def extract_features(
                         "feature_set": feature_set,
                         "temporal_enrichment": temporal_enrichment,
                         "feature_dim": int(sequences[0].shape[-1]),
+                        "shard_index": int(shard_index),
+                        "num_shards": int(num_shards),
+                        "storage_dtype": storage_dtype,
                     }
                 )
 
@@ -627,7 +1040,7 @@ def parse_args() -> argparse.Namespace:
         "--feature-set",
         type=str,
         default="base",
-        choices=["base", "enhanced", "dense709"],
+        choices=["base", "enhanced", "dense709", "depth_robust", "depth_robust_v2"],
         help="Facial feature recipe",
     )
     parser.add_argument(
@@ -636,6 +1049,21 @@ def parse_args() -> argparse.Namespace:
         default="velocity_std",
         choices=["none", "velocity_std"],
         help="Append per-frame velocity and per-window std copies. Use none for exact frame feature dimension.",
+    )
+    parser.add_argument(
+        "--label-mode",
+        type=str,
+        default="four_class",
+        choices=["four_class", "binary"],
+        help="Target label recipe. four_class uses engagement_raw (0..3).",
+    )
+    parser.add_argument("--num-shards", type=int, default=1, help="Split label rows across this many workers")
+    parser.add_argument("--shard-index", type=int, default=0, help="Zero-based worker shard index")
+    parser.add_argument(
+        "--storage-dtype",
+        choices=["float16", "float32"],
+        default="float32",
+        help="On-disk dtype; loaders cast to float32 during training",
     )
     return parser.parse_args()
 
@@ -656,6 +1084,10 @@ def main() -> None:
         resize_width=args.resize_width,
         feature_set=args.feature_set,
         temporal_enrichment=args.temporal_enrichment,
+        label_mode=args.label_mode,
+        num_shards=args.num_shards,
+        shard_index=args.shard_index,
+        storage_dtype=args.storage_dtype,
     )
     LOGGER.info("Saved feature manifest to %s", manifest_path)
 
