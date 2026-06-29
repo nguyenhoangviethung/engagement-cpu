@@ -49,7 +49,7 @@ RAW_VIDEO_DIR = RAW_DATASET_DIR
 PROCESSED_DIR = DATA_DIR / "processed"
 FEATURES_DIR = PROCESSED_DIR / "features"
 PROCESSED_LABELS_CSV = PROCESSED_DIR / "engagement_only_labels.csv"
-FEATURE_MANIFEST_CSV = PROCESSED_DIR / "final_feature_manifest.csv"
+FEATURE_MANIFEST_CSV = PROCESSED_DIR / "feature_manifest.csv"
 FOUR_CLASS_DEPTH_ROBUST_RUN_DIR = (
     PROCESSED_DIR / "runs" / "extract_depth_robust_5w_20260620_130850"
 )

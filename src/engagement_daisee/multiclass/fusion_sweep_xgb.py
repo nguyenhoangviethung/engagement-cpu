@@ -9,15 +9,16 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from sklearn.metrics import accuracy_score, balanced_accuracy_score, confusion_matrix, f1_score, precision_recall_fscore_support
 from xgboost import XGBClassifier
 
 from engagement_daisee.common.manifest import normalize_manifest_columns
 from engagement_daisee.common.config import FOUR_CLASS_FEATURE_MANIFEST_CSV
 from engagement_daisee.ml.train import _apply_feature_preprocessor, _build_feature_matrix, _load_feature_preprocessor
-from engagement_daisee.multiclass.train_all import _aggregate_by_video, _compute_multiclass_metrics, _split_indices
 
 
 LOGGER = logging.getLogger("fusion_sweep_xgb")
+NUM_CLASSES = 4
 
 
 def _setup_logging() -> None:
@@ -47,6 +48,64 @@ def _load_xgb_model(model_path: Path) -> XGBClassifier:
     model = XGBClassifier()
     model.load_model(str(model_path))
     return model
+
+
+def _split_indices(manifest: pd.DataFrame) -> tuple[list[int], list[int], list[int]]:
+    split_series = manifest["split"].astype(str).str.strip().str.lower()
+    train_indices = split_series[split_series == "train"].index.tolist()
+    val_indices = split_series[split_series == "validation"].index.tolist()
+    test_indices = split_series[split_series == "test"].index.tolist()
+    if not train_indices or not val_indices or not test_indices:
+        raise ValueError(
+            "Official split requires non-empty train/validation/test rows in manifest. "
+            f"Got train={len(train_indices)}, validation={len(val_indices)}, test={len(test_indices)}"
+        )
+    return train_indices, val_indices, test_indices
+
+
+def _aggregate_by_video(manifest_subset: pd.DataFrame, labels: np.ndarray, probabilities: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    if "video_id" not in manifest_subset.columns:
+        return labels.astype(np.int64), probabilities.astype(np.float32)
+
+    probs = np.asarray(probabilities, dtype=np.float32)
+    if probs.ndim == 1:
+        probs = probs[:, None]
+
+    frame = pd.DataFrame({"video_id": manifest_subset["video_id"].astype(str).to_numpy(), "label": labels.astype(np.int64)})
+    prob_cols = {f"p_{idx}": probs[:, idx] for idx in range(probs.shape[1])}
+    frame = pd.concat([frame, pd.DataFrame(prob_cols)], axis=1)
+    grouped = frame.groupby("video_id", sort=False)
+    video_labels = grouped["label"].first().to_numpy(dtype=np.int64)
+    video_probs = grouped[[f"p_{idx}" for idx in range(probs.shape[1])]].mean().to_numpy(dtype=np.float32)
+    return video_labels, video_probs
+
+
+def _compute_multiclass_metrics(labels: np.ndarray, predictions: np.ndarray, probabilities: np.ndarray | None = None) -> dict[str, object]:
+    labels = labels.astype(np.int64)
+    predictions = predictions.astype(np.int64)
+    precision, recall, f1, support = precision_recall_fscore_support(
+        labels,
+        predictions,
+        labels=list(range(NUM_CLASSES)),
+        zero_division=0,
+    )
+    metrics: dict[str, object] = {
+        "accuracy": float(accuracy_score(labels, predictions)),
+        "balanced_accuracy": float(balanced_accuracy_score(labels, predictions)),
+        "f1_macro": float(f1_score(labels, predictions, average="macro", zero_division=0)),
+        "precision_macro": float(np.mean(precision)),
+        "recall_macro": float(np.mean(recall)),
+        "precision_per_class": [float(value) for value in precision.tolist()],
+        "recall_per_class": [float(value) for value in recall.tolist()],
+        "f1_per_class": [float(value) for value in f1.tolist()],
+        "support_per_class": [int(value) for value in support.tolist()],
+        "confusion_matrix": confusion_matrix(labels, predictions, labels=list(range(NUM_CLASSES))).tolist(),
+    }
+    if probabilities is not None and probabilities.ndim == 2 and probabilities.shape[1] == NUM_CLASSES:
+        clipped = np.clip(np.asarray(probabilities, dtype=np.float64), 1e-8, 1.0)
+        row_indices = np.arange(len(labels))
+        metrics["cross_entropy"] = float(-np.mean(np.log(clipped[row_indices, labels])))
+    return metrics
 
 
 def _xgb_probs(model_path: Path, preprocessor_path: Path, manifest: pd.DataFrame, feature_mode: str) -> np.ndarray:
