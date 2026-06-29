@@ -83,6 +83,10 @@ data/processed/runs/triple_xgb_504_features/.../*.npy
 Cài công cụ HF nếu máy mới chưa có:
 
 ```bash
+python3 -m venv .venv
+. .venv/bin/activate
+pip install -U pip
+pip install -r requirements.txt
 pip install -U huggingface_hub
 ```
 
@@ -181,6 +185,41 @@ sample feature shape: (30, 504) float32
 ```
 
 Nếu chỉ muốn train/reproduce mà không extract lại, raw video không bắt buộc; chỉ cần manifest, label và `triple_xgb_504_features.zip`.
+
+## Reproducibility checklist
+
+Mức tái hiện thực tế:
+
+| Mục tiêu | Mức đảm bảo |
+| :--- | :--- |
+| Kéo lại đúng raw video, manifest, label, feature `.npy`, product model | Cao, vì artifact đã nằm trên HF theo đường dẫn cố định |
+| Chạy inference bằng product model đã upload | Cao, nếu cài đúng dependency trong `requirements.txt` |
+| Re-train lại Triple XGB từ manifest để đạt khoảng `75-77%` accuracy và `balanced_accuracy >75%` | Cao, nhưng có thể lệch nhỏ theo version XGBoost/CPU/threading |
+| Re-extract feature từ raw video | Chậm hơn và phụ thuộc MediaPipe/OpenCV; nên dùng feature zip nếu mục tiêu là reproduce model |
+
+Khuyến nghị để máy khác ít lệch nhất:
+
+```bash
+python3 --version   # nên dùng Python 3.10-3.12
+pip install -r requirements.txt
+```
+
+Sau khi tải và unzip, kiểm tra nhanh:
+
+```bash
+bash scripts/reproduce_triple_xgb.sh
+```
+
+Expected product/reference:
+
+```text
+model: triple_xgb_depth_robust_target_band_product
+accuracy: ~76.85%
+balanced_accuracy: ~83.20%
+f1_macro: ~76.91%
+```
+
+Nếu cần kết quả gần như cố định tuyệt đối, dùng trực tiếp zip model product đã upload thay vì train lại từ đầu.
 
 ## Pipeline tái hiện
 

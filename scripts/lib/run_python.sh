@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-CONDA_ENV="thesis"
+CONDA_ENV="${CONDA_ENV:-thesis}"
 WORKDIR=""
 
 usage() {
@@ -12,6 +12,7 @@ Usage: run_python.sh [--env NAME] [--workdir PATH] -- <command...>
 Runs a command with auto runtime selection:
 1) conda env (if conda exists and env is available)
 2) .venv fallback at WORKDIR/.venv
+3) currently active python fallback
 USAGE
 }
 
@@ -76,8 +77,16 @@ if [[ -x "$VENV_PY" ]]; then
   exec "$@"
 fi
 
+if command -v python >/dev/null 2>&1; then
+  if [[ "$1" == "python" ]]; then
+    exec "$@"
+  fi
+  exec "$@"
+fi
+
 echo "ERROR: No usable runtime found."
 echo "- Conda env '$CONDA_ENV' not available"
 echo "- Venv python not found at: $VENV_PY"
-echo "Run: ./scripts/init_project.sh"
+echo "- No active 'python' command found on PATH"
+echo "Create one with: python3 -m venv .venv && . .venv/bin/activate && pip install -r requirements.txt"
 exit 1
