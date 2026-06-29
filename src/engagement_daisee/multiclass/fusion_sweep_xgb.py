@@ -250,7 +250,7 @@ def run_sweep(
             "validation_metrics": best_metrics,
         }
         candidates = []
-        protocol = "fixed_triple_xgb_fusion_evaluation"
+        protocol = "provided_triple_xgb_fusion_evaluation"
     else:
         best = None
         best_metrics = None
@@ -353,12 +353,12 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Sweep lightweight fusion of existing 4-class XGBoost predictors.")
     parser.add_argument("--manifest", type=Path, default=FOUR_CLASS_FEATURE_MANIFEST_CSV)
     parser.add_argument("--output-json", type=Path, required=True)
-    parser.add_argument("--final-xgb-model", type=Path, default=Path("checkpoints/runs/product_4class_fixed_triple_xgb/final_xgb/model.json"))
-    parser.add_argument("--final-xgb-preprocessor", type=Path, default=Path("checkpoints/runs/product_4class_fixed_triple_xgb/final_xgb/preprocessor.npz"))
-    parser.add_argument("--boost-xgb-model", type=Path, default=Path("checkpoints/runs/product_4class_fixed_triple_xgb/boost_xgb/model.json"))
-    parser.add_argument("--boost-xgb-preprocessor", type=Path, default=Path("checkpoints/runs/product_4class_fixed_triple_xgb/boost_xgb/preprocessor.npz"))
-    parser.add_argument("--targeted-xgb-model", type=Path, default=Path("checkpoints/runs/product_4class_fixed_triple_xgb/targeted_xgb/model.json"))
-    parser.add_argument("--targeted-xgb-preprocessor", type=Path, default=Path("checkpoints/runs/product_4class_fixed_triple_xgb/targeted_xgb/preprocessor.npz"))
+    parser.add_argument("--final-xgb-model", type=Path, default=Path("checkpoints/runs/triple_xgb_target_band_repro/final_xgb/model.json"))
+    parser.add_argument("--final-xgb-preprocessor", type=Path, default=Path("checkpoints/runs/triple_xgb_target_band_repro/shared_preprocessor.npz"))
+    parser.add_argument("--boost-xgb-model", type=Path, default=Path("checkpoints/runs/triple_xgb_target_band_repro/boost_xgb/model.json"))
+    parser.add_argument("--boost-xgb-preprocessor", type=Path, default=Path("checkpoints/runs/triple_xgb_target_band_repro/shared_preprocessor.npz"))
+    parser.add_argument("--targeted-xgb-model", type=Path, default=Path("checkpoints/runs/triple_xgb_target_band_repro/targeted_xgb/model.json"))
+    parser.add_argument("--targeted-xgb-preprocessor", type=Path, default=Path("checkpoints/runs/triple_xgb_target_band_repro/shared_preprocessor.npz"))
     parser.add_argument("--feature-mode", choices=["basic", "tsfresh", "copur"], default="tsfresh")
     parser.add_argument("--weight-step", type=float, default=0.05)
     parser.add_argument("--min-accuracy", type=float, default=0.75)

@@ -1,10 +1,7 @@
 from __future__ import annotations
 
 import argparse
-import json
 import logging
-import random
-import time
 import urllib.request
 from pathlib import Path
 
@@ -12,54 +9,44 @@ import cv2
 import numpy as np
 import pandas as pd
 
-from engagement_daisee.common.config import PROCESSED_LABELS_CSV, RAW_VIDEO_DIR, VIDEO_EXTENSIONS
-from engagement_daisee.app.focus_monitor import (
-    CHIN,
-    LEFT_EYE,
-    LEFT_IRIS,
-    LOWER_LIP,
-    NOSE_TIP,
-    RIGHT_EYE,
-    RIGHT_IRIS,
-    UPPER_LIP,
-    _dist,
-    _eye_aspect_ratio,
-    _normed,
-)
+from engagement_daisee.common.config import RAW_VIDEO_DIR, VIDEO_EXTENSIONS
 
 try:
     import mediapipe as mp
 except Exception as exc:  # pragma: no cover
-    raise RuntimeError("mediapipe is required for MediaPipe feature extraction") from exc
+    raise RuntimeError("mediapipe is required for 504-feature extraction") from exc
 
 
-LOGGER = logging.getLogger("mediapipe_extract")
-DEFAULT_OUTPUT_ROOT = Path("data/processed/runs/mediapipe_product/features")
+LOGGER = logging.getLogger("extract_504_features")
+
 DEFAULT_FACE_LANDMARKER = Path("external/mediapipe/face_landmarker.task")
 FACE_LANDMARKER_URL = (
     "https://storage.googleapis.com/mediapipe-models/face_landmarker/"
     "face_landmarker/float16/latest/face_landmarker.task"
 )
-FEATURE_COLUMNS = [
-    "face_present",
-    "ear",
-    "left_ear",
-    "right_ear",
-    "gaze_offset",
-    "gaze_x",
-    "gaze_y",
-    "head_tilt",
-    "head_yaw_proxy",
-    "head_pitch_proxy",
-    "mouth_open",
-    "face_center_x",
-    "face_center_y",
-    "face_width",
-    "face_height",
-    "face_area",
-    "nose_x",
-    "nose_y",
+
+# 56 stable facial landmarks. 56 * (x, y, z) = 168 dims per frame.
+# The final model consumes velocity/std enrichment: 168 * 3 = 504 dims.
+SELECTED_LANDMARKS = [
+    # face contour / pose anchors
+    10, 152, 234, 454, 127, 356, 93, 323,
+    # eyebrows
+    70, 63, 105, 66, 107, 336, 296, 334, 293, 300,
+    # eyes + eyelids
+    33, 133, 160, 159, 158, 144, 145, 153,
+    362, 263, 387, 386, 385, 373, 374, 380,
+    # iris proxies / eye centers
+    468, 473,
+    # nose
+    1, 2, 98, 327, 168, 197,
+    # mouth
+    61, 291, 13, 14, 78, 308, 81, 311, 178, 402,
+    # cheeks / jaw support
+    50, 280, 205, 425, 172, 397,
 ]
+FRAME_DIM = len(SELECTED_LANDMARKS) * 3
+FEATURE_DIM = FRAME_DIM * 3
+WINDOW_SIZE = 30
 
 
 def _setup_logging() -> None:
@@ -68,33 +55,6 @@ def _setup_logging() -> None:
         format="%(asctime)s | %(levelname)s | %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
-
-
-def _build_video_index(raw_video_dir: Path) -> dict[str, Path]:
-    index: dict[str, Path] = {}
-    for ext in VIDEO_EXTENSIONS:
-        for path in raw_video_dir.rglob(f"*{ext}"):
-            index.setdefault(path.stem.lower(), path)
-            index.setdefault(path.name.lower(), path)
-    return index
-
-
-def _resolve_video_path(video_id: str, raw_video_dir: Path, index: dict[str, Path]) -> Path | None:
-    candidate = Path(video_id)
-    if candidate.is_file():
-        return candidate
-    nested = raw_video_dir / candidate
-    if nested.is_file():
-        return nested
-    return index.get(candidate.stem.lower()) or index.get(candidate.name.lower()) or index.get(str(video_id).lower())
-
-
-def _uniform_indices(total_frames: int, frames_per_video: int) -> list[int]:
-    if total_frames <= 0:
-        return []
-    if total_frames <= frames_per_video:
-        return list(range(total_frames))
-    return sorted(set(int(i) for i in np.linspace(0, total_frames - 1, frames_per_video).round()))
 
 
 def _ensure_face_landmarker_model(model_path: Path) -> Path:
@@ -119,239 +79,180 @@ def _create_face_landmarker(model_path: Path):
     return mp.tasks.vision.FaceLandmarker.create_from_options(options)
 
 
-def _select_rows(labels: pd.DataFrame, sample_videos: int, seed: int) -> pd.DataFrame:
-    rows = labels.drop_duplicates("video_id").copy()
-    if sample_videos <= 0 or len(rows) <= sample_videos:
-        return rows.reset_index(drop=True)
-    parts = []
-    per_split = max(1, sample_videos // max(1, rows["split"].nunique())) if "split" in rows.columns else sample_videos
-    for _, split_rows in rows.groupby("split", sort=False):
-        parts.append(split_rows.sample(n=min(per_split, len(split_rows)), random_state=seed))
-    sampled = pd.concat(parts, ignore_index=True).drop_duplicates("video_id")
-    remaining = sample_videos - len(sampled)
-    if remaining > 0:
-        pool = rows[~rows["video_id"].isin(sampled["video_id"])]
-        if len(pool):
-            sampled = pd.concat([sampled, pool.sample(n=min(remaining, len(pool)), random_state=seed)], ignore_index=True)
-    records = sampled.to_dict("records")
-    random.Random(seed).shuffle(records)
-    return pd.DataFrame(records)
+def _build_video_index(raw_video_dir: Path) -> dict[str, Path]:
+    index: dict[str, Path] = {}
+    for ext in VIDEO_EXTENSIONS:
+        for path in raw_video_dir.rglob(f"*{ext}"):
+            index.setdefault(path.stem.lower(), path)
+            index.setdefault(path.name.lower(), path)
+    return index
 
 
-def _landmark_features(landmarks, width: int, height: int) -> np.ndarray:
+def _resolve_video_path(video_id: str, raw_video_dir: Path, index: dict[str, Path]) -> Path | None:
+    candidate = Path(str(video_id))
+    if candidate.is_file():
+        return candidate
+    nested = raw_video_dir / candidate
+    if nested.is_file():
+        return nested
+    return index.get(candidate.stem.lower()) or index.get(candidate.name.lower()) or index.get(str(video_id).lower())
+
+
+def _frame_feature_168(landmarks, image_width: int, image_height: int) -> np.ndarray:
     pts = np.array([[lm.x, lm.y, lm.z] for lm in landmarks], dtype=np.float32)
-    px = _normed(pts, width, height)
-    left_ear = _eye_aspect_ratio(px, LEFT_EYE)
-    right_ear = _eye_aspect_ratio(px, RIGHT_EYE)
-    ear = 0.5 * (left_ear + right_ear)
+    selected = pts[SELECTED_LANDMARKS].copy()
 
-    l_iris = np.mean(px[LEFT_IRIS, :2], axis=0)
-    l_eye_center = 0.5 * (px[33, :2] + px[133, :2])
-    r_iris = np.mean(px[RIGHT_IRIS, :2], axis=0)
-    r_eye_center = 0.5 * (px[362, :2] + px[263, :2])
-    l_eye_width = _dist(px[33, :2], px[133, :2])
-    r_eye_width = _dist(px[362, :2], px[263, :2])
-    l_offset = (l_iris - l_eye_center) / l_eye_width
-    r_offset = (r_iris - r_eye_center) / r_eye_width
-    gaze_xy = 0.5 * (l_offset + r_offset)
-    gaze_offset = float(np.linalg.norm(gaze_xy))
+    # Normalize translation and scale so distance-to-camera changes are less harmful.
+    face_min = pts[:, :2].min(axis=0)
+    face_max = pts[:, :2].max(axis=0)
+    center = 0.5 * (face_min + face_max)
+    scale = float(max(face_max[0] - face_min[0], face_max[1] - face_min[1], 1e-6))
+    aspect = float(image_width / max(1, image_height))
 
-    nose = px[NOSE_TIP, :2]
-    chin = px[CHIN, :2]
-    head_vec = chin - nose
-    head_tilt = abs(float(np.arctan2(head_vec[0], head_vec[1] + 1e-6)))
-    face_min = px[:, :2].min(axis=0)
-    face_max = px[:, :2].max(axis=0)
-    face_size = np.maximum(face_max - face_min, 1e-6)
-    face_center = 0.5 * (face_min + face_max)
-    head_yaw_proxy = float((nose[0] - face_center[0]) / face_size[0])
-    head_pitch_proxy = float((nose[1] - face_center[1]) / face_size[1])
-    mouth_open = _dist(px[UPPER_LIP, :2], px[LOWER_LIP, :2]) / _dist(px[33, :2], px[263, :2])
-
-    return np.array(
-        [
-            1.0,
-            ear,
-            left_ear,
-            right_ear,
-            gaze_offset,
-            float(gaze_xy[0]),
-            float(gaze_xy[1]),
-            head_tilt,
-            head_yaw_proxy,
-            head_pitch_proxy,
-            mouth_open,
-            float(face_center[0] / max(1, width)),
-            float(face_center[1] / max(1, height)),
-            float(face_size[0] / max(1, width)),
-            float(face_size[1] / max(1, height)),
-            float((face_size[0] * face_size[1]) / max(1, width * height)),
-            float(nose[0] / max(1, width)),
-            float(nose[1] / max(1, height)),
-        ],
-        dtype=np.float32,
-    )
+    selected[:, 0] = (selected[:, 0] - center[0]) / scale
+    selected[:, 1] = ((selected[:, 1] - center[1]) * aspect) / scale
+    selected[:, 2] = selected[:, 2] / scale
+    return np.nan_to_num(selected.reshape(-1), nan=0.0, posinf=0.0, neginf=0.0).astype(np.float32)
 
 
-def _detect_landmarks(face_landmarker, rgb: np.ndarray):
+def _detect_frame(face_landmarker, frame_bgr: np.ndarray) -> np.ndarray | None:
+    height, width = frame_bgr.shape[:2]
+    rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
     image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
     result = face_landmarker.detect(image)
     if not result.face_landmarks:
         return None
-    return result.face_landmarks[0]
+    return _frame_feature_168(result.face_landmarks[0], width, height)
 
 
-def _extract_video_sequence(video_path: Path, frames_per_video: int, face_landmarker) -> tuple[np.ndarray, int]:
+def _interpolate_missing(sequence: list[np.ndarray | None]) -> np.ndarray:
+    frame = pd.DataFrame(
+        [np.full(FRAME_DIM, np.nan, dtype=np.float32) if item is None else item for item in sequence]
+    )
+    frame = frame.interpolate(limit_direction="both").fillna(0.0)
+    return frame.to_numpy(dtype=np.float32)
+
+
+def _enrich_window(raw_window: np.ndarray) -> np.ndarray:
+    raw_window = np.asarray(raw_window, dtype=np.float32)
+    velocity = np.diff(raw_window, axis=0, prepend=raw_window[:1])
+    std = np.repeat(raw_window.std(axis=0, keepdims=True), raw_window.shape[0], axis=0)
+    return np.concatenate([raw_window, velocity, std], axis=1).astype(np.float32)
+
+
+def _windows_504(sequence_168: np.ndarray, window_size: int = WINDOW_SIZE) -> list[np.ndarray]:
+    windows: list[np.ndarray] = []
+    for start in range(0, len(sequence_168) - window_size + 1, window_size):
+        windows.append(_enrich_window(sequence_168[start : start + window_size]))
+    return windows
+
+
+def extract_video_504(video_path: Path, face_landmarker, *, frame_stride: int = 1, max_frames: int = 0) -> list[np.ndarray]:
     cap = cv2.VideoCapture(str(video_path))
     if not cap.isOpened():
-        return np.zeros((0, len(FEATURE_COLUMNS)), dtype=np.float32), 0
-    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
-    indices = _uniform_indices(total_frames, frames_per_video)
-    wanted = set(indices)
-    sequence: list[np.ndarray] = []
-    current = 0
+        raise RuntimeError(f"Could not open video: {video_path}")
+    sequence: list[np.ndarray | None] = []
+    frame_index = 0
     while True:
         ok, frame = cap.read()
         if not ok:
             break
-        if current in wanted:
-            h, w = frame.shape[:2]
-            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            landmarks = _detect_landmarks(face_landmarker, rgb)
-            if landmarks:
-                features = _landmark_features(landmarks, w, h)
-            else:
-                features = np.zeros(len(FEATURE_COLUMNS), dtype=np.float32)
-            sequence.append(features)
-            if len(sequence) >= len(indices):
+        if frame_index % max(1, frame_stride) == 0:
+            sequence.append(_detect_frame(face_landmarker, frame))
+            if max_frames > 0 and len(sequence) >= max_frames:
                 break
-        current += 1
+        frame_index += 1
     cap.release()
     if not sequence:
-        return np.zeros((0, len(FEATURE_COLUMNS)), dtype=np.float32), total_frames
-    return np.stack(sequence, axis=0).astype(np.float32), total_frames
+        return []
+    return _windows_504(_interpolate_missing(sequence), window_size=WINDOW_SIZE)
 
 
-def extract_mediapipe_features(
-    labels_csv: Path,
-    raw_video_dir: Path,
-    output_root: Path,
-    frames_per_video: int,
-    sample_videos: int,
-    seed: int,
-    resume: bool,
-    log_every: int,
-    face_landmarker_model: Path,
-) -> Path:
-    start = time.time()
+def run_extract(args: argparse.Namespace) -> dict[str, object]:
+    labels = pd.read_csv(args.labels_csv)
+    if "video_id" not in labels.columns:
+        raise ValueError("labels csv must contain video_id")
+    if "label" not in labels.columns:
+        raise ValueError("labels csv must contain label")
+    if "split" not in labels.columns:
+        labels["split"] = "train"
+
+    raw_video_dir = args.raw_video_dir
+    output_root = args.output_dir
+    feature_dir = output_root / "features"
+    feature_dir.mkdir(parents=True, exist_ok=True)
+    video_index = _build_video_index(raw_video_dir)
+
+    rows = []
+    face_landmarker = _create_face_landmarker(args.face_landmarker)
+    try:
+        for row_idx, row in labels.iterrows():
+            if args.limit_videos > 0 and row_idx >= args.limit_videos:
+                break
+            video_id = str(row["video_id"])
+            video_path = _resolve_video_path(video_id, raw_video_dir, video_index)
+            if video_path is None:
+                LOGGER.warning("Missing video for %s", video_id)
+                continue
+            LOGGER.info("Extracting %s", video_path)
+            windows = extract_video_504(
+                video_path,
+                face_landmarker,
+                frame_stride=args.frame_stride,
+                max_frames=args.max_frames,
+            )
+            for segment_index, window in enumerate(windows):
+                out_path = feature_dir / f"{Path(video_id).stem}_seg{segment_index:04d}.npy"
+                np.save(out_path, window.astype(np.float32))
+                rows.append(
+                    {
+                        "feature_path": out_path.as_posix(),
+                        "video_id": Path(video_id).name,
+                        "video_path": video_path.as_posix(),
+                        "label": int(row["label"]),
+                        "split": str(row["split"]).strip().lower(),
+                        "segment_index": segment_index,
+                        "num_frames": int(window.shape[0]),
+                        "feature_set": "depth_robust_v2",
+                        "temporal_enrichment": "velocity_std",
+                        "feature_dim": FEATURE_DIM,
+                        "storage_dtype": "float32",
+                    }
+                )
+    finally:
+        face_landmarker.close()
+
+    manifest = pd.DataFrame(rows)
     output_root.mkdir(parents=True, exist_ok=True)
-    features_dir = output_root / "features"
-    features_dir.mkdir(parents=True, exist_ok=True)
-    manifest_path = output_root / "mediapipe_feature_manifest.csv"
-    state_path = output_root / "extract_state.json"
-
-    labels = pd.read_csv(labels_csv)
-    required = {"video_id", "engagement_binary", "split"}
-    missing = required - set(labels.columns)
-    if missing:
-        raise ValueError(f"Labels CSV missing columns: {sorted(missing)}")
-    labels = _select_rows(labels, sample_videos=sample_videos, seed=seed)
-    labels["video_id"] = labels["video_id"].astype(str)
-
-    done_ids: set[str] = set()
-    rows: list[dict[str, object]] = []
-    if resume and manifest_path.exists():
-        existing = pd.read_csv(manifest_path)
-        rows = existing.to_dict("records")
-        done_ids = set(existing["video_id"].astype(str).tolist())
-        LOGGER.info("Resume | existing_videos=%d manifest=%s", len(done_ids), manifest_path)
-
-    index = _build_video_index(raw_video_dir)
-    face_landmarker = _create_face_landmarker(face_landmarker_model)
-
-    unresolved = unreadable = empty = 0
-    pending = []
-    for i, item in enumerate(labels.to_dict("records"), start=1):
-        video_id = str(item["video_id"])
-        if video_id in done_ids:
-            continue
-        video_path = _resolve_video_path(video_id, raw_video_dir, index)
-        if video_path is None:
-            unresolved += 1
-            continue
-        sequence, total_frames = _extract_video_sequence(video_path, frames_per_video, face_landmarker)
-        if total_frames <= 0:
-            unreadable += 1
-            continue
-        if len(sequence) == 0:
-            empty += 1
-            continue
-        feature_path = features_dir / f"{Path(video_id).stem}.npy"
-        np.save(feature_path, sequence)
-        row = {
-            "feature_path": str(feature_path),
-            "video_id": video_id,
-            "video_path": str(video_path),
-            "split": str(item["split"]).lower(),
-            "label": int(item["engagement_binary"]),
-            "num_frames_raw": int(total_frames),
-            "num_frames_used": int(len(sequence)),
-            "face_present_ratio": float(sequence[:, 0].mean()),
-            "feature_set": "mediapipe_facemesh_v1",
-            "feature_dim": len(FEATURE_COLUMNS),
-        }
-        rows.append(row)
-        pending.append(row)
-        if len(pending) >= 50:
-            pd.DataFrame(rows).to_csv(manifest_path, index=False)
-            pending.clear()
-        if i % max(1, log_every) == 0:
-            LOGGER.info("Progress %d/%d | rows=%d unresolved=%d unreadable=%d empty=%d", i, len(labels), len(rows), unresolved, unreadable, empty)
-
-    pd.DataFrame(rows).to_csv(manifest_path, index=False)
+    manifest_path = output_root / "feature_manifest.csv"
+    manifest.to_csv(manifest_path, index=False)
     summary = {
-        "manifest": str(manifest_path),
-        "videos": len(rows),
-        "frames_per_video": frames_per_video,
-        "feature_columns": FEATURE_COLUMNS,
-        "unresolved": unresolved,
-        "unreadable": unreadable,
-        "empty": empty,
-        "elapsed_sec": time.time() - start,
+        "status": "success",
+        "manifest": manifest_path.as_posix(),
+        "rows": len(manifest),
+        "videos": int(manifest["video_id"].nunique()) if len(manifest) else 0,
+        "feature_dim": FEATURE_DIM,
+        "window_size": WINDOW_SIZE,
     }
-    state_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
-    LOGGER.info("Finished MediaPipe extraction | %s", json.dumps(summary, indent=2))
-    return manifest_path
+    (output_root / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
+    return summary
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Extract CPU-friendly MediaPipe FaceMesh engagement features.")
-    parser.add_argument("--labels", type=Path, default=PROCESSED_LABELS_CSV)
-    parser.add_argument("--videos", type=Path, default=RAW_VIDEO_DIR)
-    parser.add_argument("--output-root", type=Path, default=DEFAULT_OUTPUT_ROOT)
-    parser.add_argument("--frames-per-video", type=int, default=30)
-    parser.add_argument("--sample-videos", type=int, default=0, help="0 means full dataset")
-    parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--log-every", type=int, default=100)
-    parser.add_argument("--face-landmarker-model", type=Path, default=DEFAULT_FACE_LANDMARKER)
-    parser.add_argument("--no-resume", action="store_true")
+    parser = argparse.ArgumentParser(description="Extract 30x504 depth-robust MediaPipe feature windows.")
+    parser.add_argument("--labels-csv", type=Path, default=Path("data/processed/engagement_only_labels.csv"))
+    parser.add_argument("--raw-video-dir", type=Path, default=RAW_VIDEO_DIR)
+    parser.add_argument("--output-dir", type=Path, default=Path("data/processed/runs/triple_xgb_504_features"))
+    parser.add_argument("--face-landmarker", type=Path, default=DEFAULT_FACE_LANDMARKER)
+    parser.add_argument("--frame-stride", type=int, default=1)
+    parser.add_argument("--max-frames", type=int, default=0)
+    parser.add_argument("--limit-videos", type=int, default=0)
     return parser.parse_args()
 
 
 def main() -> None:
     _setup_logging()
-    args = parse_args()
-    extract_mediapipe_features(
-        labels_csv=args.labels,
-        raw_video_dir=args.videos,
-        output_root=args.output_root,
-        frames_per_video=args.frames_per_video,
-        sample_videos=args.sample_videos,
-        seed=args.seed,
-        resume=not args.no_resume,
-        log_every=args.log_every,
-        face_landmarker_model=args.face_landmarker_model,
-    )
+    print(json.dumps(run_extract(parse_args()), indent=2))
 
 
 if __name__ == "__main__":

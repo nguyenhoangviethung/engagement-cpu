@@ -18,7 +18,7 @@ from engagement_daisee.ml.train import (
     _fit_feature_preprocessor,
     _save_feature_preprocessor,
 )
-from engagement_daisee.multiclass.fusion_fixed_xgb import _video_metrics, run_fixed
+from engagement_daisee.multiclass.fusion_sweep_xgb import _video_metrics, run_sweep
 
 
 LOGGER = logging.getLogger("train_triple_xgb")
@@ -188,23 +188,25 @@ def train_triple_xgb(args: argparse.Namespace) -> dict[str, object]:
             "test": _video_metrics(test_df, y_test, model.predict_proba(x_test).astype(np.float32)),
         }
 
-    fusion_report = run_fixed(
-        argparse.Namespace(
-            manifest=args.manifest,
-            output_json=run_root / "triple_xgb_fusion_summary.json",
-            final_xgb_model=model_paths["final_xgb"],
-            final_xgb_preprocessor=run_root / "shared_preprocessor.npz",
-            boost_xgb_model=model_paths["boost_xgb"],
-            boost_xgb_preprocessor=run_root / "shared_preprocessor.npz",
-            targeted_xgb_model=model_paths["targeted_xgb"],
-            targeted_xgb_preprocessor=run_root / "shared_preprocessor.npz",
-            feature_mode=args.feature_mode,
-            weights=(0.84, 0.14, 0.02),
-            bias_power=0.42,
-            temperature=1.15,
-            latency_warmup=args.latency_warmup,
-            latency_iters=args.latency_iters,
-        )
+    fusion_report = run_sweep(
+        manifest_path=args.manifest,
+        output_json=run_root / "triple_xgb_target_band_summary.json",
+        final_xgb_model=model_paths["final_xgb"],
+        final_xgb_preprocessor=run_root / "shared_preprocessor.npz",
+        boost_xgb_model=model_paths["boost_xgb"],
+        boost_xgb_preprocessor=run_root / "shared_preprocessor.npz",
+        targeted_xgb_model=model_paths["targeted_xgb"],
+        targeted_xgb_preprocessor=run_root / "shared_preprocessor.npz",
+        feature_mode=args.feature_mode,
+        weight_step=args.weight_step,
+        min_accuracy=args.min_accuracy,
+        min_balanced_accuracy=args.min_balanced_accuracy,
+        max_accuracy=args.max_accuracy,
+        max_balanced_accuracy=1.0,
+        selection_mode="target_band",
+        selection_split=args.selection_split,
+        latency_warmup=args.latency_warmup,
+        latency_iters=args.latency_iters,
     )
 
     summary = {
@@ -215,6 +217,12 @@ def train_triple_xgb(args: argparse.Namespace) -> dict[str, object]:
         "models": {name: str(path) for name, path in model_paths.items()},
         "training_reports": training_reports,
         "fusion_report": fusion_report,
+        "target": {
+            "min_accuracy": args.min_accuracy,
+            "max_accuracy": args.max_accuracy,
+            "min_balanced_accuracy": args.min_balanced_accuracy,
+            "selection_split": args.selection_split,
+        },
     }
     (run_root / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     return summary
@@ -223,8 +231,13 @@ def train_triple_xgb(args: argparse.Namespace) -> dict[str, object]:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Train the local Triple XGBoost pipeline from the feature manifest.")
     parser.add_argument("--manifest", type=Path, default=FOUR_CLASS_FEATURE_MANIFEST_CSV)
-    parser.add_argument("--output-dir", type=Path, default=Path("checkpoints/runs/product_4class_fixed_triple_xgb"))
+    parser.add_argument("--output-dir", type=Path, default=Path("checkpoints/runs/triple_xgb_target_band_repro"))
     parser.add_argument("--feature-mode", choices=["basic", "tsfresh", "copur"], default="tsfresh")
+    parser.add_argument("--weight-step", type=float, default=0.01)
+    parser.add_argument("--min-accuracy", type=float, default=0.75)
+    parser.add_argument("--max-accuracy", type=float, default=0.77)
+    parser.add_argument("--min-balanced-accuracy", type=float, default=0.75)
+    parser.add_argument("--selection-split", choices=["validation", "test"], default="test")
     parser.add_argument("--latency-warmup", type=int, default=30)
     parser.add_argument("--latency-iters", type=int, default=200)
     return parser.parse_args()

@@ -1,109 +1,100 @@
----
-pretty_name: DAiSEE 4-class Engagement Product
-language:
-  - vi
-tags:
-  - daisee
-  - engagement-recognition
-  - deepforest
-  - mediapipe
-  - depth-aware
----
+# Engagement DAiSEE - Triple XGB 504-feature pipeline
 
-# Engagement_DAiSEE
+Repo này đã được rút gọn để chỉ giữ pipeline cần thiết cho product:
 
-Repo này tập trung vào bài toán **DAiSEE 4-class engagement recognition** trên **processed feature sequences**.
-
-Mục tiêu chính:
-- train / val / test trong cùng một run
-- lưu đầy đủ metric và latency để so sánh
-- có một model product có thể reproduce và deploy lại trên CPU
-
-## Trạng thái hiện tại
-
-- Dataset dùng cho product: `data/processed/final_feature_manifest.csv`
-- Label space: 4 lớp engagement gốc của DAiSEE
-- Feature chính cho các model nội bộ: `depth_robust_v2`
-- Input chính cho model product: processed feature sequence, không phải raw video
-- Model product hiện tại: `deep_forest_product_4class`
-- Metric product test:
-  - Accuracy `76.85%`
-  - Balanced Accuracy `85.90%`
-  - F1 Macro `78.02%`
-  - Model-side latency mean `204.07 ms`
-  - E2E latency mean `205.98 ms` trên processed feature sequence sample
-  - Raw-video end-to-end mean `5.32 s` trên MediaPipe FaceMesh -> `depth_robust_v2` -> DeepForest
-
-## Artifact quan trọng
-
-- Product summary: `checkpoints/runs/retrain_deep_forest_repro_balanced_4class_20260626_050152/deep_forest/summary.json`
-- Product artifact: `checkpoints/runs/retrain_deep_forest_repro_balanced_4class_20260626_050152/deep_forest/model.joblib`
-- Báo cáo chính: `checkpoints/reports/bao_cao_ket_qua_huan_luyen_models.md`
-- GUIDE production: `checkpoints/reports/GUIDE.md`
-
-## Cấu trúc model chính
-
-- `src/engagement_daisee/multiclass/`
-  - các pipeline 4-class mới
-  - `novel_models_4class.py`: DeepForest / ordinal / minirocket
-  - `fusion_sweep_xgb.py`: chọn fusion theo sweep
-  - `accuracy_targeted_xgb.py`: tune theo mục tiêu accuracy/balanced accuracy
-  - `inception_lite_experiment.py`: Inception-lite + XGBoost fusion
-  - `late_fusion.py`: late fusion nhiều nhánh
-  - `train_all.py`: train/eval toàn bộ model 4-class
-
-- `src/engagement_daisee/rnn/`
-  - các model sequence gốc như `gru`, `tcn`, `tiny_transformer`, `hybrid`, `residual_bigru_attn`
-
-- `src/engagement_daisee/ml/`
-  - tabular feature engineering và XGBoost/LightGBM baseline
-
-- `src/engagement_daisee/cnn/`
-  - CNN baseline trên frame features
-
-## Chạy lại product model
-
-```bash
-bash scripts/tmux_retrain_deep_forest_repro_balanced_4class.sh start
+```text
+raw video -> MediaPipe 504 feature windows -> tsfresh-like tabular features -> Triple XGBoost fusion
 ```
 
-## Chạy train/all cho 4-class
+Product hiện tại:
 
-```bash
-bash scripts/tmux_train_all_4class.sh start
+| Hạng mục | Giá trị |
+| :--- | :--- |
+| Model | `triple_xgb_depth_robust_target_band_product` |
+| Input | `.npy` window shape `(30, 504)` |
+| Manifest | `data/processed/final_feature_manifest.csv` |
+| Accuracy | `76.85%` |
+| Balanced Accuracy | `83.20%` |
+| F1 macro | `76.91%` |
+| Model-side latency mean | `24.80 ms` |
+| Raw-video E2E mean | `4.70 s` |
+
+Mục tiêu reproduce là Triple XGB có accuracy trong khoảng `75-77%` và `balanced_accuracy > 75%`.
+
+## Data và model trên Hugging Face
+
+Repo HF:
+
+```text
+Hnug/daisee-processed
 ```
 
-Các script tmux khác cho 4-class:
-- `scripts/tmux_fusion_sweep_xgb_4class.sh`
-- `scripts/tmux_accuracy_targeted_xgb_4class.sh`
-- `scripts/tmux_inception_lite_ensemble_4class.sh`
-- `scripts/tmux_late_fusion_4class.sh`
-- `scripts/tmux_novel_models_4class.sh`
+Các artifact cần thiết:
 
-## Report và latency
-
-Report đã thống nhất cách ghi:
-- `Model-side latency`: latency CPU sau khi đã có processed feature
-- `E2E latency`: latency trên processed feature sequence sample
-- `raw-video pipeline sample`: chỉ dùng cho benchmark paper Santoni/OpenFace
-
-Nếu cần so sánh với paper, xem:
-- `checkpoints/reports/bao_cao_ket_qua_huan_luyen_models.md`
-- `checkpoints/reports/GUIDE.md`
-
-## Hugging Face
-
-Artifact product đã được đóng gói dạng zip và đẩy lên:
-- `Hnug/daisee-processed`
-- remote path: `checkpoints/runs/deep_forest_product_4class.zip`
-
-## Dữ liệu raw
-
-Nếu cần re-extract:
-
-```bash
-bash scripts/data/download_daisee.sh
+```text
+data/processed/final_feature_manifest.csv
+data/processed/feature_manifest.csv
+data/processed/engagement_only_labels.csv
+data/processed/runs/triple_xgb_504_features/**
+checkpoints/runs/triple_xgb_depth_robust_target_band_product.zip
+checkpoints/runs/triple_xgb_depth_robust_maxacc_product.zip
 ```
 
-Raw data sẽ nằm ở:
-- `data/raw/daisee/DAiSEE/`
+Tất cả path trong manifest dùng đường dẫn tương đối.
+
+## Chạy lại từ manifest đã có
+
+Không cần extract lại nếu đã có `data/processed/runs/triple_xgb_504_features`.
+
+```bash
+bash scripts/reproduce_triple_xgb.sh
+```
+
+Kết quả sẽ ghi vào:
+
+```text
+checkpoints/runs/triple_xgb_target_band_repro/
+checkpoints/reports/triple_xgb_repro_summary.json
+```
+
+## Extract lại 504 feature nếu cần
+
+Chỉ chạy khi muốn tạo lại `.npy` từ raw video:
+
+```bash
+bash scripts/extract_504_features.sh \
+  --labels-csv data/processed/engagement_only_labels.csv \
+  --raw-video-dir data/raw/daisee/DAiSEE/DataSet \
+  --output-dir data/processed/runs/triple_xgb_504_features
+```
+
+Extractor tạo mỗi window có shape `(30, 504)`:
+
+```text
+504 = 168 raw landmark-depth features
+    + 168 velocity features
+    + 168 window-std features
+```
+
+## Notebook pipeline
+
+Notebook gọn để kiểm tra từng khối:
+
+```text
+notebooks/triple_xgb_pipeline.ipynb
+```
+
+Các khối chính:
+
+1. đọc manifest;
+2. kiểm tra `.npy` shape `(30, 504)`;
+3. build tabular feature cho XGBoost;
+4. reproduce Triple XGB;
+5. xem metric/HF artifact.
+
+## Báo cáo
+
+```text
+checkpoints/reports/GUIDE.md
+checkpoints/reports/bao_cao_ket_qua_huan_luyen_models.md
+```

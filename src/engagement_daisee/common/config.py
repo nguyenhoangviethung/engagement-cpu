@@ -22,8 +22,6 @@ def _resolve_daisee_root() -> Path:
             BASE_DIR.parent / "data" / "raw" / "DAiSEE",
             Path.home() / "engagement-cpu" / "data" / "raw" / "daisee" / "DAiSEE",
             Path.home() / "engagement-cpu" / "data" / "raw" / "DAiSEE",
-            Path("/mnt") / "data" / "raw" / "daisee" / "DAiSEE",
-            Path("/mnt") / "data" / "raw" / "DAiSEE",
         ]
     )
 
@@ -51,7 +49,7 @@ FEATURES_DIR = PROCESSED_DIR / "features"
 PROCESSED_LABELS_CSV = PROCESSED_DIR / "engagement_only_labels.csv"
 FEATURE_MANIFEST_CSV = PROCESSED_DIR / "feature_manifest.csv"
 FOUR_CLASS_DEPTH_ROBUST_RUN_DIR = (
-    PROCESSED_DIR / "runs" / "extract_depth_robust_5w_20260620_130850"
+    PROCESSED_DIR / "runs" / "triple_xgb_504_features"
 )
 FOUR_CLASS_FEATURE_MANIFEST_CSV = FEATURE_MANIFEST_CSV
 
